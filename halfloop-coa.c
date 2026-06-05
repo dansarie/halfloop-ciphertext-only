@@ -196,25 +196,6 @@ error:
 }
 
 /**
- * Binomial distribution probability mass function.
- * @param n number of trials.
- * @param k number of successful trials.
- * @param p probability of success in a single trial.
- * @return Value of the binomial distribution probability mass function with
- * parameters (n, k, p).
- */
-static double binomial(u64 n, u64 k, double p) {
-  double coeff = 0;
-  if (k > n - k) {
-    k = n - k;
-  }
-  for (int i = 1; i <= k; i++) {
-    coeff += log(n + 1 - i) - log(i);
-  }
-  return exp(coeff + k * log(p) + (n - k) * log(1 - p));
-}
-
-/**
  * Calculates the probability of success of the attack.
  * @param tau threshold value.
  * @param num_pairs number of available pairs.
@@ -236,11 +217,30 @@ static halfloop_result_t calc_p_success(
   CHECK_BAD_ARGUMENT(p_ct <= 0.0);
   CHECK_BAD_ARGUMENT(p_ct > 1.0);
   CHECK_BAD_ARGUMENT(p_success == NULL);
-  /* FIXME: Use the multinomial distribution instead. */
-  double p = p_ct + (1.0 - p_ct) * (keys_per_match / num_counters);
+  double p_wrong = keys_per_match / num_counters; /* Wrong pair. */
+  double p_none = 1.0 - p_ct - p_wrong; /* No hit */
   *p_success = 1.0;
-  for (int t = 0; t < (int)tau; t++) {
-    *p_success -= binomial(num_pairs, t, p);
+  for (int j = 0; j < (int)tau; j++) {
+    for (int k = 0; k <= j; k++) {
+      /* Log of multinomial coefficient. */
+      double v = lgamma(num_pairs + 1);
+      v -= lgamma(k + 1);
+      v -= lgamma(j - k + 1);
+      v -= lgamma(num_pairs - j + 1);
+      /* Log probability of k wrong-pair hits. */
+      if (k != 0) {
+        v += k * log(p_wrong);
+      }
+      /* Log probability of j - k right-pair hits. */
+      if (j - k != 0) {
+        v += (j - k) * log(p_ct);
+      }
+      /* Log probability of num_pairs - j pairs without hit. */
+      if (num_pairs - j != 0) {
+        v += (num_pairs - j) * log(p_none);
+      }
+      *p_success -= exp(v);
+    }
   }
   return HALFLOOP_SUCCESS;
 }
