@@ -61,25 +61,26 @@
 typedef struct {
   u8* __restrict__ sbox;      /**< HALFLOOP/AES S-box. */
   u8 * __restrict__ inv_sbox; /**< HALFLOOP/AES inverse S-box. */
-  u32 * __restrict__ y0;   /**< y0 to x2 difference LUT. */
-  u32 * __restrict__ y1;   /**< y1 to x2 difference LUT. */
-  u32 * __restrict__ y2;   /**< y2 to x2 difference LUT. */
-  u8 * __restrict__ mul2;  /**< LUT for finite field multiplication by 2. */
-  u8 * __restrict__ mul6;  /**< LUT for finite field multiplication by 6. */
-  u8 * __restrict__ mul8;  /**< LUT for finite field multiplication by 8. */
-  u8 * __restrict__ mul9;  /**< LUT for finite field multiplication by 9. */
-  u8 * __restrict__ mul39; /**< LUT for finite field multiplication by 39. */
-  u16 * __restrict__ ddt;  /**< DDT output value LUT. */
+  u32 * __restrict__ y0;      /**< y0 to x2 difference LUT. */
+  u32 * __restrict__ y1;      /**< y1 to x2 difference LUT. */
+  u32 * __restrict__ y2;      /**< y2 to x2 difference LUT. */
+  u8 * __restrict__ mul2;     /**< LUT for finite field multiplication by 2. */
+  u8 * __restrict__ mul6;     /**< LUT for finite field multiplication by 6. */
+  u8 * __restrict__ mul8;     /**< LUT for finite field multiplication by 8. */
+  u8 * __restrict__ mul9;     /**< LUT for finite field multiplication by 9. */
+  u8 * __restrict__ mul39;    /**< LUT for finite field multiplication by 39. */
+  u16 * __restrict__ ddt;     /**< DDT output value LUT. */
 } CudaTables;
 
 /** Attach thread arguments. */
 typedef struct {
   halfloop_algorithm_t algorithm; /**< Selected algorithm. */
-  const tuple_t *ct; /**< Ciphertext-tweak tuples. */
-  const tuple_pair_t *pairs; /**< Pair indexes. */
-  std::mutex mutex;  /**< Worker synchronization mutex. */
-  std::unique_ptr<std::barrier<>> barrier; /**< Worker synchronization barrier. */
-  candidate_key_t *validated; /**< Validated candidate keys. */
+  const tuple_t *ct;              /**< Ciphertext-tweak tuples. */
+  const tuple_pair_t *pairs;      /**< Pair indexes. */
+  std::mutex mutex;               /**< Worker synchronization mutex. */
+  std::unique_ptr<std::barrier<>> barrier; /**< Worker synchronization
+                                                barrier. */
+  candidate_key_t *validated;     /**< Validated candidate keys. */
   u64 next_job;      /**< Value of non-fixed bits in next job. */
   u32 fixed_bits;    /**< User-set job bits. Filled from MSB down to LSB. */
   u32 threadnum;     /**< Counter for individual thread number assignment. */
@@ -429,7 +430,8 @@ __device__ Twentyfourbits bitslice_inv_mix_columns(Twentyfourbits in) {
  * @param state a 24-bit HALFLOOP state.
  * @param rk a 24-bit round key.
  */
-__device__ Twentyfourbits bitslice_inv_round(Twentyfourbits state,
+__device__ Twentyfourbits bitslice_inv_round(
+    Twentyfourbits state,
     Twentyfourbits rk) {
   state = bitslice_inv_mix_columns(xor24(state, rk));
   Twentyfourbits out = {
@@ -568,9 +570,19 @@ __device__ u32 inv_rotate_rows_d(u32 state) {
  * @param num_found Output variable for number of found keys in found.
  * @param t Lookup tables for HALFLOOP.
  */
-__global__ void __launch_bounds__(128, 5) bitslice_kernel(u32 x6a, u32 x6b,
-    u32 *twa, u32 *twb, u32 rk3, u32 rk4, u32 rk5, u32 rk7, u32 rk8a,
-    u32 *found, int *num_found, CudaTables t) {
+__global__ void __launch_bounds__(128, 5) bitslice_kernel(
+    u32 x6a,
+    u32 x6b,
+    u32 *twa,
+    u32 *twb,
+    u32 rk3,
+    u32 rk4,
+    u32 rk5,
+    u32 rk7,
+    u32 rk8a,
+    u32 *found,
+    int *num_found,
+    CudaTables t) {
   u32 idx = blockIdx.x * blockDim.x + threadIdx.x;
   /* Iterate over all possible values of normalized rk6. In each iteration, the
    * lower 13 bits of rk6 are equal to the most significant 13 bits of idx. The
@@ -779,12 +791,22 @@ __device__ u32 atomicInc8(u32 *arr, u32 idx) {
  * @param profile if true, only a limited set of keys are searched. Used for
  * fast profiling.
  */
-__global__ void __launch_bounds__(512, 2) ct_attack2(u32 * __restrict__ x9,
-    u32 * __restrict__ tw8, u32 * __restrict__ tw9, u8 * __restrict__ twd,
-    u32 num_ct, u32 * __restrict__ pairs, u32 num_pairs, u8 rk9n2, u32 tau1,
-    u32 * __restrict__ v8s, u32 * __restrict__ counts,
-    u64 * __restrict__ candidates, u32 * __restrict__ num_candidates,
-    bool * warn, CudaTables t, bool profile) {
+__global__ void __launch_bounds__(512, 2) ct_attack2(
+    u32 * __restrict__ x9,
+    u32 * __restrict__ tw8,
+    u32 * __restrict__ tw9,
+    u8 * __restrict__ twd,
+    u32 num_ct,
+    u32 * __restrict__ pairs,
+    u32 num_pairs,
+    u8 rk9n2, u32 tau1,
+    u32 * __restrict__ v8s,
+    u32 * __restrict__ counts,
+    u64 * __restrict__ candidates,
+    u32 * __restrict__ num_candidates,
+    bool * warn,
+    CudaTables t,
+    bool profile) {
 
   /* Block storage in global memory. */
   u32 *v8 = v8s + blockIdx.x * num_ct;
@@ -922,11 +944,22 @@ __global__ void __launch_bounds__(512, 2) ct_attack2(u32 * __restrict__ x9,
  * @param profile if true, only a limited set of keys are searched. Used for
  * fast profiling.
  */
-__global__ void __launch_bounds__(1024, 2) ct_attack3(u32 * __restrict__ x9,
-    u32 * __restrict__ tw8, u32 * __restrict__ tw9, u8 * __restrict__ twd,
-    u32 num_ct, u32 * __restrict__ pairs, u32 num_pairs, u8 rk9n2, u32 tau1,
-    u32 tau2, u32 * __restrict__ v8s, u64 * __restrict__ candidates,
-    u32 * __restrict__ num_candidates, bool * warn, CudaTables t,
+__global__ void __launch_bounds__(1024, 2) ct_attack3(
+    u32 * __restrict__ x9,
+    u32 * __restrict__ tw8,
+    u32 * __restrict__ tw9,
+    u8 * __restrict__ twd,
+    u32 num_ct,
+    u32 * __restrict__ pairs,
+    u32 num_pairs,
+    u8 rk9n2,
+    u32 tau1,
+    u32 tau2,
+    u32 * __restrict__ v8s,
+    u64 * __restrict__ candidates,
+    u32 * __restrict__ num_candidates,
+    bool * warn,
+    CudaTables t,
     bool profile) {
 
 #if __CUDA_ARCH__ < 800
@@ -1235,8 +1268,10 @@ static halfloop_result_t init_y2_lut_cuda(u8 y2delta, u32 *lut) {
  * allocated device memory. If NULL, the memory will not be initialized.
  * @param size the size of the allocated buffer.
  */
-static halfloop_result_t create_cuda_device_table(void **device,
-    const void *host, size_t size) {
+static halfloop_result_t create_cuda_device_table(
+    void **device,
+    const void *host,
+    size_t size) {
   CHECK_BAD_ARGUMENT(device == NULL);
   CHECK_BAD_ARGUMENT(size == 0);
   *device = NULL;
@@ -1380,14 +1415,27 @@ halfloop_result_t test_halfloop_cuda_bitslice(void) {
 
   print_message("Benchmarking CUDA bitslice algorithm.", WHITE);
   TIMER_START(&timer);
-  RETURN_ON_ERROR(halfloop_cuda_bitslice(ct0, ct1, tweak, rk[7], rk[8], rk[9],
-      rk[10], &found, &num_found));
+  RETURN_ON_ERROR(halfloop_cuda_bitslice(
+      ct0,
+      ct1,
+      tweak,
+      rk[7],
+      rk[8],
+      rk[9],
+      rk[10],
+      &found,
+      &num_found));
   TIMER_STOP(&timer);
   elapsed = timer_elapsed(timer);
-  print_message("Number of keys found during bitslice test: %d.", WHITE,
+  print_message(
+      "Number of keys found during bitslice test: %d.",
+      WHITE,
       num_found);
   setlocale(LC_NUMERIC, "");
-  print_message("Test took %.2f seconds: %'lld keys/second.", WHITE, elapsed,
+  print_message(
+      "Test took %.2f seconds: %'lld keys/second.",
+      WHITE,
+      elapsed,
       (u64)(0x100000000ULL / elapsed));
 
   for (int i = 0; i < num_found && !ok; i++) {
@@ -1400,15 +1448,22 @@ halfloop_result_t test_halfloop_cuda_bitslice(void) {
 error:
   if (err != HALFLOOP_SUCCESS) {
     if (err != HALFLOOP_SUCCESS) {
-      print_message("CUDA bitslice benchmark failed. PT=%06x tweak=%016" PRIx64
-        " Key=%016" PRIx64 "%016" PRIx64, RED, pt, tweak, key.hi, key.lo);
+      print_message(
+          "CUDA bitslice benchmark failed. PT=%06x tweak=%016" PRIx64
+              " Key=%016" PRIx64 "%016" PRIx64,
+          RED,
+          pt,
+          tweak,
+          key.hi,
+          key.lo);
     }
   }
   free(found);
   return err;
 }
 
-halfloop_result_t halfloop_list_cuda_devices(int *num_devices,
+halfloop_result_t halfloop_list_cuda_devices(
+    int *num_devices,
     char **device_names) {
   CHECK_BAD_ARGUMENT(num_devices == NULL);
   CHECK_BAD_ARGUMENT(device_names == NULL);
@@ -1435,8 +1490,16 @@ error:
   return err;
 }
 
-halfloop_result_t halfloop_cuda_bitslice(u32 cta, u32 ctb, u64 tw, u32 rk7n,
-    u32 rk8n, u32 rk9n, u32 rk10n, u32 **found, int *num_found) {
+halfloop_result_t halfloop_cuda_bitslice(
+    u32 cta,
+    u32 ctb,
+    u64 tw,
+    u32 rk7n,
+    u32 rk8n,
+    u32 rk9n,
+    u32 rk10n,
+    u32 **found,
+    int *num_found) {
   CHECK_BAD_ARGUMENT(cta   & 0xff000000);
   CHECK_BAD_ARGUMENT(ctb   & 0xff000000);
   CHECK_BAD_ARGUMENT(rk7n  & 0xff000000);
@@ -1495,13 +1558,24 @@ halfloop_result_t halfloop_cuda_bitslice(u32 cta, u32 ctb, u64 tw, u32 rk7n,
     twb[i] ^= tw0[i];
   }
   RETURN_ON_ERROR(halfloop_round10_tweak(tw, rk9n & 0xff, twa + 10));
-  RETURN_ON_ERROR(halfloop_round10_tweak(tw ^ (1 << 30), rk9n & 0xff,
+  RETURN_ON_ERROR(halfloop_round10_tweak(
+      tw ^ (1 << 30),
+      rk9n & 0xff,
       twb + 10));
-  RETURN_ON_CUDA_ERROR(cudaMemcpy(twa_d, twa, 11 * sizeof(u32),
+  RETURN_ON_CUDA_ERROR(cudaMemcpy(
+      twa_d,
+      twa,
+      11 * sizeof(u32),
       cudaMemcpyHostToDevice));
-  RETURN_ON_CUDA_ERROR(cudaMemcpy(twb_d, twb, 11 * sizeof(u32),
+  RETURN_ON_CUDA_ERROR(cudaMemcpy(
+      twb_d,
+      twb,
+      11 * sizeof(u32),
       cudaMemcpyHostToDevice));
-  RETURN_ON_CUDA_ERROR(cudaMemcpy(num_found_d, num_found, sizeof(int),
+  RETURN_ON_CUDA_ERROR(cudaMemcpy(
+      num_found_d,
+      num_found,
+      sizeof(int),
       cudaMemcpyHostToDevice));
   /* Calculate x6 and known round keys. */
   rk10 = rk10n ^ twa[10];
@@ -1524,16 +1598,33 @@ halfloop_result_t halfloop_cuda_bitslice(u32 cta, u32 ctb, u64 tw, u32 rk7n,
   rk51 = ((rk10 & 0xff) ^ 2 ^ SBOX[rk9a & 0xff]) << 8;
   rk5 = rk50 | rk51;
 
-  bitslice_kernel<<<1024,64>>>(x6a, x6b, twa_d, twb_d, rk3, rk4, rk5, rk7,
-      rk8a, found_d, num_found_d, tables);
+  bitslice_kernel<<<1024,64>>>(
+      x6a,
+      x6b,
+      twa_d,
+      twb_d,
+      rk3,
+      rk4,
+      rk5,
+      rk7,
+      rk8a,
+      found_d,
+      num_found_d,
+      tables);
   RETURN_ON_CUDA_ERROR(cudaGetLastError());
 
-  RETURN_ON_CUDA_ERROR(cudaMemcpy(num_found, num_found_d, sizeof(int),
+  RETURN_ON_CUDA_ERROR(cudaMemcpy(
+      num_found,
+      num_found_d,
+      sizeof(int),
       cudaMemcpyDeviceToHost));
   cudaDeviceSynchronize();
   *found = (u32*)malloc(*num_found * sizeof(u32));
   RETURN_IF(num_found != 0 && *found == NULL, HALFLOOP_MEMORY_ERROR);
-  RETURN_ON_CUDA_ERROR(cudaMemcpy(*found, found_d, *num_found * sizeof(u32),
+  RETURN_ON_CUDA_ERROR(cudaMemcpy(
+      *found,
+      found_d,
+      *num_found * sizeof(u32),
       cudaMemcpyDeviceToHost));
   cudaDeviceSynchronize();
 
@@ -1600,8 +1691,12 @@ static bool get_next_job(ThreadArg *arg, u32 *job) {
  * @param x9 output list for the calculated x9 states. Must have room for at
  * least num_ct items.
  */
-static halfloop_result_t precalculate_x9(const tuple_t * __restrict__ ct,
-    int num_ct, u32 rk10n, u8 rk9n2, u32 * __restrict__ x9) {
+static halfloop_result_t precalculate_x9(
+    const tuple_t * __restrict__ ct,
+    int num_ct,
+    u32 rk10n,
+    u8 rk9n2,
+    u32 * __restrict__ x9) {
   CHECK_BAD_ARGUMENT(ct == NULL);
   CHECK_BAD_ARGUMENT(num_ct < 2);
   CHECK_BAD_ARGUMENT(x9 == NULL);
@@ -1629,9 +1724,13 @@ error:
  * @param x9 a list of precalculated x9 states.
  * @param rk10 round key 10.
  */
-static halfloop_result_t validate_candidates(ThreadArg *arg,
-    u64 * __restrict__ candidates, u32 num_candidates, u32 tau2,
-    const u32 * __restrict__ x9, u32 rk10,
+static halfloop_result_t validate_candidates(
+    ThreadArg *arg,
+    u64 * __restrict__ candidates,
+    u32 num_candidates,
+    u32 tau2,
+    const u32 * __restrict__ x9,
+    u32 rk10,
     candidate_key_t ** __restrict__ validated,
     u32 * __restrict__ num_validated) {
   CHECK_BAD_ARGUMENT(arg == NULL);
@@ -1667,12 +1766,20 @@ static halfloop_result_t validate_candidates(ThreadArg *arg,
     }
     /* Validate the candidate key against the expected v7 difference and
      * recover the MSB of LL^-1(rk7). */
-    RETURN_ON_ERROR(validate_rk8(arg->ct, v8, arg->num_ct, arg->pairs,
-        arg->num_pairs, rk8, &rk7, &keycount));
+    RETURN_ON_ERROR(validate_rk8(
+        arg->ct,
+        v8,
+        arg->num_ct,
+        arg->pairs,
+        arg->num_pairs,
+        rk8,
+        &rk7,
+        &keycount));
     if (keycount >= tau2) {
       if (validated_alloc == *num_validated) {
         validated_alloc += 10;
-        candidate_key_t *tmp = (candidate_key_t*)realloc(*validated,
+        candidate_key_t *tmp = (candidate_key_t*)realloc(
+            *validated,
             sizeof(candidate_key_t) * validated_alloc);
         RETURN_IF(tmp == NULL, HALFLOOP_MEMORY_ERROR);
         *validated = tmp;
@@ -1685,8 +1792,14 @@ static halfloop_result_t validate_candidates(ThreadArg *arg,
       k->rk10 = rk10;
       *num_validated += 1;
       arg->mutex.lock();
-      print_message("Found candidate key: %02x %06x %06x %06x "
-          "(%d matching pairs)", GREEN, rk7, rk8, rk9n, rk10, keycount);
+      print_message(
+          "Found candidate key: %02x %06x %06x %06x (%d matching pairs)",
+          GREEN,
+          rk7,
+          rk8,
+          rk9n,
+          rk10,
+          keycount);
       arg->mutex.unlock();
     }
   }
@@ -1744,9 +1857,14 @@ static void* ct_attack_thread(void *a) {
 
   RETURN_ON_CUDA_ERROR(cudaGetDeviceProperties(&deviceProp, devicenum));
   if (arg->verbose) {
-    print_message("Thread %d: Device: %s CC: %d.%d Shared mem: %d "
-        "Multiprocessors: %d", WHITE, threadnum, deviceProp.name,
-        deviceProp.major, deviceProp.minor, deviceProp.sharedMemPerBlock,
+    print_message(
+        "Thread %d: Device: %s CC: %d.%d Shared mem: %d Multiprocessors: %d",
+        WHITE,
+        threadnum,
+        deviceProp.name,
+        deviceProp.major,
+        deviceProp.minor,
+        deviceProp.sharedMemPerBlock,
         deviceProp.multiProcessorCount);
   }
 
@@ -1754,7 +1872,9 @@ static void* ct_attack_thread(void *a) {
   blocks = MIN(deviceProp.multiProcessorCount * arg->blockmul, 65536);
   if (deviceProp.major < 8 && arg->tau1 > 31) {
     if ((threadnum & 1) == 0) { /* Only print one warning per device. */
-      print_message("WARNING: Adjusting tau1 to 31 on device %d", RED,
+      print_message(
+          "WARNING: Adjusting tau1 to 31 on device %d",
+          RED,
           devicenum);
     }
     tau1 = 31;
@@ -1768,8 +1888,13 @@ static void* ct_attack_thread(void *a) {
   x9_h            = (u32*)malloc(sizeof(u32) * arg->num_ct);
   pairs_h         = (u32*)malloc(sizeof(u32) * arg->num_pairs);
   candidates_h = (u64*)malloc(sizeof(u64) * MAX_CANDIDATES);
-  RETURN_IF(tw8_h == NULL || tw9_h == NULL || twd_h == NULL || pairs_h == NULL
-      || x9_h == NULL || pairs_h == NULL || candidates_h == NULL,
+  RETURN_IF(tw8_h == NULL
+            || tw9_h == NULL
+            || twd_h == NULL
+            || pairs_h == NULL
+            || x9_h == NULL
+            || pairs_h == NULL
+            || candidates_h == NULL,
       HALFLOOP_MEMORY_ERROR);
 
   /* Initialize constant tweaks and pairs arrays. */
@@ -1788,7 +1913,9 @@ static void* ct_attack_thread(void *a) {
   RETURN_ON_ERROR(CREATE_CUDA_TABLE(&tw8_d, tw8_h, sizeof(u32) * arg->num_ct));
   RETURN_ON_ERROR(CREATE_CUDA_TABLE(&tw9_d, tw9_h, sizeof(u32) * arg->num_ct));
   RETURN_ON_ERROR(CREATE_CUDA_TABLE(&twd_d, twd_h, sizeof(u8) * arg->num_ct));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&pairs_d, pairs_h,
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE(
+      &pairs_d,
+      pairs_h,
       sizeof(u32) * arg->num_pairs));
   FREE_AND_NULL(tw8_h);
   FREE_AND_NULL(tw9_h);
@@ -1797,15 +1924,23 @@ static void* ct_attack_thread(void *a) {
 
   /* Allocate device memory. */
   RETURN_ON_ERROR(CREATE_CUDA_TABLE(&x9_d, NULL, sizeof(u32) * arg->num_ct));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&v8s_d, NULL,
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE(
+      &v8s_d,
+      NULL,
       sizeof(u32) * arg->num_ct * blocks));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&candidates_d, NULL,
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE(
+      &candidates_d,
+      NULL,
       sizeof(u64) * MAX_CANDIDATES));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&num_candidates_d, &num_candidates_h,
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE(
+      &num_candidates_d,
+      &num_candidates_h,
       sizeof(u32)));
   RETURN_ON_ERROR(CREATE_CUDA_TABLE(&warn_d, &warn, sizeof(bool)));
   if (arg->algorithm == GPU_ATTACK2) {
-    RETURN_ON_ERROR(CREATE_CUDA_TABLE(&count_d, NULL,
+    RETURN_ON_ERROR(CREATE_CUDA_TABLE(
+        &count_d,
+        NULL,
         sizeof(u32) * ALG2_COUNTERS * blocks));
   }
   RETURN_ON_CUDA_ERROR(cudaStreamCreate(&stream));
@@ -1829,25 +1964,73 @@ static void* ct_attack_thread(void *a) {
     }
     u32 rk9n2 = job >> 24;
     u32 rk10n = job & 0xffffff;
-    RETURN_ON_ERROR(precalculate_x9(arg->ct, arg->num_ct, rk10n, (u8)rk9n2,
+    RETURN_ON_ERROR(precalculate_x9(
+        arg->ct,
+        arg->num_ct,
+        rk10n,
+        (u8)rk9n2,
         x9_h));
-    RETURN_ON_CUDA_ERROR(cudaMemcpyAsync(x9_d, x9_h, sizeof(u32) * arg->num_ct,
-        cudaMemcpyHostToDevice, stream));
+    RETURN_ON_CUDA_ERROR(cudaMemcpyAsync(
+        x9_d,
+        x9_h,
+        sizeof(u32) * arg->num_ct,
+        cudaMemcpyHostToDevice,
+        stream));
     if (arg->algorithm == GPU_ATTACK2) {
-      ct_attack2<<<blocks, nthreads, 0, stream>>>(x9_d, tw8_d, tw9_d, twd_d,
-          arg->num_ct, pairs_d, arg->num_pairs, rk9n2, tau1, v8s_d, count_d,
-          candidates_d, num_candidates_d, warn_d, tables, arg->profile);
+      ct_attack2<<<blocks, nthreads, 0, stream>>>(
+          x9_d,
+          tw8_d,
+          tw9_d,
+          twd_d,
+          arg->num_ct,
+          pairs_d,
+          arg->num_pairs,
+          rk9n2,
+          tau1,
+          v8s_d,
+          count_d,
+          candidates_d,
+          num_candidates_d,
+          warn_d,
+          tables,
+          arg->profile);
     } else {
-      ct_attack3<<<blocks, nthreads, 0, stream>>>(x9_d, tw8_d, tw9_d, twd_d,
-          arg->num_ct, pairs_d, arg->num_pairs, rk9n2, tau1, arg->tau2, v8s_d,
-          candidates_d, num_candidates_d, warn_d, tables, arg->profile);
+      ct_attack3<<<blocks, nthreads, 0, stream>>>(
+          x9_d,
+          tw8_d,
+          tw9_d,
+          twd_d,
+          arg->num_ct,
+          pairs_d,
+          arg->num_pairs,
+          rk9n2,
+          tau1,
+          arg->tau2,
+          v8s_d,
+          candidates_d,
+          num_candidates_d,
+          warn_d,
+          tables,
+          arg->profile);
     }
-    RETURN_ON_CUDA_ERROR(cudaMemcpyAsync(&num_candidates_h, num_candidates_d,
-        sizeof(u32), cudaMemcpyDeviceToHost, stream));
-    RETURN_ON_CUDA_ERROR(cudaMemcpyAsync(candidates_h, candidates_d,
-        sizeof(u64) * MAX_CANDIDATES, cudaMemcpyDeviceToHost, stream));
-    RETURN_ON_CUDA_ERROR(cudaMemcpyAsync(&warn, warn_d, sizeof(bool),
-        cudaMemcpyDeviceToHost, stream));
+    RETURN_ON_CUDA_ERROR(cudaMemcpyAsync(
+        &num_candidates_h,
+        num_candidates_d,
+        sizeof(u32),
+        cudaMemcpyDeviceToHost,
+        stream));
+    RETURN_ON_CUDA_ERROR(cudaMemcpyAsync(
+        candidates_h,
+        candidates_d,
+        sizeof(u64) * MAX_CANDIDATES,
+        cudaMemcpyDeviceToHost,
+        stream));
+    RETURN_ON_CUDA_ERROR(cudaMemcpyAsync(
+        &warn,
+        warn_d,
+        sizeof(bool),
+        cudaMemcpyDeviceToHost,
+        stream));
     cudaStreamSynchronize(stream);
     if (warn) {
       arg->mutex.lock();
@@ -1856,8 +2039,13 @@ static void* ct_attack_thread(void *a) {
     }
     if (arg->verbose) {
       arg->mutex.lock();
-      print_message("Thread %d job %08x found %d candidate%s.", WHITE,
-          threadnum, job, num_candidates_h, num_candidates_h == 1 ? "" : "s");
+      print_message(
+          "Thread %d job %08x found %d candidate%s.",
+          WHITE,
+          threadnum,
+          job,
+          num_candidates_h,
+          num_candidates_h == 1 ? "" : "s");
       arg->mutex.unlock();
     }
     if (num_candidates_h > 0) {
@@ -1865,18 +2053,28 @@ static void* ct_attack_thread(void *a) {
         num_candidates_h = MAX_CANDIDATES;
       }
       num_validated = 0;
-      RETURN_ON_ERROR(validate_candidates(arg, candidates_h, num_candidates_h,
-          arg->tau2, x9_h, rk10n, &validated, &num_validated));
+      RETURN_ON_ERROR(validate_candidates(
+          arg,
+          candidates_h,
+          num_candidates_h,
+          arg->tau2,
+          x9_h,
+          rk10n,
+          &validated,
+          &num_validated));
       if (num_validated > 0) {
         arg->mutex.lock();
-        candidate_key_t *tmp = (candidate_key_t*)realloc(arg->validated,
+        candidate_key_t *tmp = (candidate_key_t*)realloc(
+            arg->validated,
             sizeof(candidate_key_t) * (arg->num_validated + num_validated));
         if (tmp == NULL) {
           arg->mutex.unlock();
           RETURN_IF(true, HALFLOOP_MEMORY_ERROR);
         }
         arg->validated = tmp;
-        memcpy(arg->validated + arg->num_validated, validated,
+        memcpy(
+            arg->validated + arg->num_validated,
+            validated,
             sizeof(candidate_key_t) * num_validated);
         arg->num_validated += num_validated;
         arg->mutex.unlock();
@@ -1910,10 +2108,22 @@ error:
   return NULL;
 }
 
-halfloop_result_t cuda_ct_attack(halfloop_algorithm_t algo, const tuple_t *ct,
-    int num_ct, const tuple_pair_t *pairs, int num_pairs, u32 tau1, u32 tau2,
-    u32 blockmul, u32 fixed_bits, int num_fixed, candidate_key_t **candidates,
-    u32 *num_candidates, bool verbose, bool profile, int *devices,
+halfloop_result_t cuda_ct_attack(
+    halfloop_algorithm_t algo,
+    const tuple_t *ct,
+    int num_ct,
+    const tuple_pair_t *pairs,
+    int num_pairs,
+    u32 tau1,
+    u32 tau2,
+    u32 blockmul,
+    u32 fixed_bits,
+    int num_fixed,
+    candidate_key_t **candidates,
+    u32 *num_candidates,
+    bool verbose,
+    bool profile,
+    int *devices,
     int num_devices) {
   CHECK_BAD_ARGUMENT(algo != GPU_ATTACK2 && algo != GPU_ATTACK3);
   CHECK_BAD_ARGUMENT(ct == NULL);

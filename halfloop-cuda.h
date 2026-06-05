@@ -37,8 +37,12 @@ extern "C" {
 #define RETURN_ON_CUDA_ERROR(R) {\
   cudaError_t e = R;\
   if (e != cudaSuccess) {\
-    fprintf(stderr, "CUDA error \"%s\" on line %d in %s.\n", \
-        cudaGetErrorName(e), __LINE__, __FILE__);\
+    fprintf(\
+        stderr,\
+        "CUDA error \"%s\" on line %d in %s.\n",\
+        cudaGetErrorName(e),\
+        __LINE__,\
+        __FILE__);\
     err = HALFLOOP_INTERNAL_ERROR;\
     goto error;\
   }\
@@ -49,8 +53,12 @@ extern "C" {
   if (e != CUDA_SUCCESS) {\
     const char *errstr = NULL;\
     cuGetErrorName(e, &errstr);\
-    fprintf(stderr, "CUDA error \"%s\" on line %d in %s.\n", errstr,\
-        __LINE__, __FILE__);\
+    fprintf( \
+        stderr,\
+        "CUDA error \"%s\" on line %d in %s.\n",\
+        errstr,\
+        __LINE__,\
+        __FILE__);\
     err = HALFLOOP_INTERNAL_ERROR;\
     goto error;\
   }\
@@ -77,7 +85,8 @@ halfloop_result_t test_halfloop_cuda_bitslice(void);
  * at index n * 256 in the returned array. The array must be freed by the
  * caller.
  */
-halfloop_result_t halfloop_list_cuda_devices(int *num_devices,
+halfloop_result_t halfloop_list_cuda_devices(
+    int *num_devices,
     char **device_names);
 
 /**
@@ -99,8 +108,16 @@ halfloop_result_t halfloop_list_cuda_devices(int *num_devices,
  * @param num_found returns the number of keys in found.
  * @return halfloop_result_t HALFLOOP_SUCCESS on success.
  */
-halfloop_result_t halfloop_cuda_bitslice(u32 ct0, u32 ct1, u64 tw0, u32 rk7,
-    u32 rk8, u32 rk9, u32 rk10, u32 **found, int *num_found);
+halfloop_result_t halfloop_cuda_bitslice(
+    u32 ct0,
+    u32 ct1,
+    u64 tw0,
+    u32 rk7,
+    u32 rk8,
+    u32 rk9,
+    u32 rk10,
+    u32 **found,
+    int *num_found);
 
 /**
  * Runs a ciphertext-only attack on HALFLOOP, recovering rk8, rk9, rk10, and one
@@ -133,10 +150,22 @@ halfloop_result_t halfloop_cuda_bitslice(u32 ct0, u32 ct1, u64 tw0, u32 rk7,
  * @param found return variable for found 80-bit candidate keys.
  * @param num_found return variable for number of keys in found array.
  */
-halfloop_result_t cuda_ct_attack(halfloop_algorithm_t algo, const tuple_t *ct,
-    int num_ct, const tuple_pair_t *pairs, int num_pairs, u32 tau1, u32 tau2,
-    u32 blockmul, u32 fixed_bits, int num_fixed, candidate_key_t **candidates,
-    u32 *num_candidates, bool verbose, bool profile, int *devices,
+halfloop_result_t cuda_ct_attack(
+    halfloop_algorithm_t algo,
+    const tuple_t *ct,
+    int num_ct,
+    const tuple_pair_t *pairs,
+    int num_pairs,
+    u32 tau1,
+    u32 tau2,
+    u32 blockmul,
+    u32 fixed_bits,
+    int num_fixed,
+    candidate_key_t **candidates,
+    u32 *num_candidates,
+    bool verbose,
+    bool profile,
+    int *devices,
     int num_devices);
 
 #ifdef __cplusplus

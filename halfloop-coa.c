@@ -37,22 +37,30 @@
 
 /** Parsed command line options. */
 struct options {
-  bool benchmark;
-  bool listdevs;
-  bool verbose;
-  bool profile;
+  bool benchmark;   /**< Set by the -b flag to run benchmarks. */
+  bool listdevs;    /**< Set by the -l flag to list CUDA devices. */
+  bool verbose;     /**< Set by the -v flag to increase verbosity. */
+  bool profile;     /**< Set by the -p flag to run a limited search for
+                         profiling purposes. */
   bool brute_force;
-  halfloop_algorithm_t algorithm;
-  char *filename;
-  u32 fixed_bits;
-  u32 tau1;
-  u32 tau2;
-  u32 blockmul;
-  int devices[MAX_DEVICES];
-  int num_devices;
-  int num_fixed;
-  double p_ct;
-  double p_success;
+  halfloop_algorithm_t algorithm; /**< Which attack algorithm to use for the
+                                       search. */
+  char *filename;   /**< Path of file that contains ciphertexts and tweaks. */
+  u32 fixed_bits;   /**< The fixed bits of the key. Filled from MSB down to
+                         LSB. The eight most significant bits represents one
+                         byte of rk9. The remaining bits represent rk10. */
+  u32 tau1;         /**< Threshold value 1 set by the -t flag. */
+  u32 tau2;         /**< Threshold value 2 set by the -u flag. */
+  u32 blockmul;     /**< Number of CUDA blocks per multiprocessor. Set by -m. */
+  int devices[MAX_DEVICES]; /**< List of CUDA device ids to use. Set by the -d
+                                 flag. */
+  int num_devices;  /**< Number of CUDA device ids in devices. Set to 0 to use
+                         all available devices. */
+  int num_fixed;    /**< Number of fixed bits in fixed_bits. */
+  double p_ct;      /**< The probability that two randomly selected callsigns
+                         will differ only in the least significant byte. Set by
+                         the -c flag. */
+  double p_success; /**< Target probability of success. Set by the -s flag. */
 };
 
 /** Used by qsort in read_input_tuples. */
@@ -122,10 +130,12 @@ static int compare_tuples(const void *tuple1, const void *tuple2) {
  * @param fname the file name of the input file.
  * @param tuples return pointer. Will contain a list of tuples on return.
  * @param num_tuples will contain the number of items in the tuples list on
- *                   return.
+ * return.
  * @return HALFLOOP_SUCCESS on success.
  */
-static halfloop_result_t read_input_pairs(const char *fname, tuple_t **tuples,
+static halfloop_result_t read_input_pairs(
+    const char *fname,
+    tuple_t **tuples,
     int *num_tuples) {
   CHECK_BAD_ARGUMENT(fname == NULL);
   CHECK_BAD_ARGUMENT(tuples == NULL);
@@ -204,8 +214,23 @@ static double binomial(u64 n, u64 k, double p) {
   return exp(coeff + k * log(p) + (n - k) * log(1 - p));
 }
 
-static halfloop_result_t calc_p_success(u32 tau, u32 num_pairs,
-    u32 num_counters, double keys_per_match, double p_ct, double *p_success) {
+/**
+ * Calculates the probability of success of the attack.
+ * @param tau threshold value.
+ * @param num_pairs number of available pairs.
+ * @param num_counters number of counters/bins in the attack.
+ * @param keys_per_match average number of keys indicated by a matching pair.
+ * @param p_ct probability that two randomly selected ciphertexts will differ
+ * only in the last byte.
+ * @param p_success output pointer for calculated probability of success.
+ */
+static halfloop_result_t calc_p_success(
+    u32 tau,
+    u32 num_pairs,
+    u32 num_counters,
+    double keys_per_match,
+    double p_ct,
+    double *p_success) {
   CHECK_BAD_ARGUMENT(num_pairs == 0);
   CHECK_BAD_ARGUMENT(num_counters == 0);
   CHECK_BAD_ARGUMENT(p_ct <= 0.0);
@@ -231,8 +256,13 @@ static halfloop_result_t calc_p_success(u32 tau, u32 num_pairs,
  * @param tau return pointer for the optimal tau value.
  * @param p_tau return pointer for calculated probability of success.
  */
-static halfloop_result_t get_tau(u32 num_pairs, u32 num_counters,
-    double keys_per_match, double p_ct, double p_success, u32 *tau,
+static halfloop_result_t get_tau(
+    u32 num_pairs,
+    u32 num_counters,
+    double keys_per_match,
+    double p_ct,
+    double p_success,
+    u32 *tau,
     double *p_tau) {
   CHECK_BAD_ARGUMENT(num_pairs < 1);
   CHECK_BAD_ARGUMENT(num_counters < 1);
@@ -246,8 +276,13 @@ static halfloop_result_t get_tau(u32 num_pairs, u32 num_counters,
   halfloop_result_t err = HALFLOOP_SUCCESS;
   *p_tau = 0.0;
   for (*tau = 255; *tau > 0 && *p_tau < p_success; (*tau)--) {
-    RETURN_ON_ERROR(calc_p_success(*tau, num_pairs, num_counters,
-        keys_per_match, p_ct, p_tau));
+    RETURN_ON_ERROR(calc_p_success(
+        *tau,
+        num_pairs,
+        num_counters,
+        keys_per_match,
+        p_ct,
+        p_tau));
   }
   *tau += 1;
 error:
@@ -275,10 +310,18 @@ error:
  * @param num_candidates return variable for the number of candidate keys in the
  * candidates list.
  */
-static halfloop_result_t ct_attack1(const tuple_t *restrict ct, int num_ct,
-    const tuple_pair_t *restrict pairs, int num_pairs, u32 tau1, u32 tau2,
-    u32 fixed_bits, int num_fixed, bool verbose,
-    candidate_key_t **restrict candidates, u32 *restrict num_candidates) {
+static halfloop_result_t ct_attack1(
+    const tuple_t *restrict ct,
+    int num_ct,
+    const tuple_pair_t *restrict pairs,
+    int num_pairs,
+    u32 tau1,
+    u32 tau2,
+    u32 fixed_bits,
+    int num_fixed,
+    bool verbose,
+    candidate_key_t **restrict candidates,
+    u32 *restrict num_candidates) {
   CHECK_BAD_ARGUMENT(ct == NULL);
   CHECK_BAD_ARGUMENT(num_ct < 2);
   CHECK_BAD_ARGUMENT(pairs == NULL);
@@ -290,7 +333,6 @@ static halfloop_result_t ct_attack1(const tuple_t *restrict ct, int num_ct,
   CHECK_BAD_ARGUMENT(num_candidates == NULL);
 
   u16 ddt[256 * 256] = {0}; /* Lookup table for S-box outputs. */
-  u8 ffmul9[256] = {0}; /* Lookup table for finite field multiplication. */
   u32 *v8 = NULL;       /* Array for precomputed v8 states. */
   u32 *x9 = NULL;       /* Array for precomputed x9 states. */
   u8 *count = 0;        /* Counter for candidate rk8 values. */
@@ -307,12 +349,9 @@ static halfloop_result_t ct_attack1(const tuple_t *restrict ct, int num_ct,
 
   /* Initialize lookup tables. */
   RETURN_ON_ERROR(init_ddt(ddt));
-  for (int i = 0; i < 256; i++) {
-    ffmul9[i] = ffmul(9, (u8)i);
-  }
 
   for (u64 bits = 0; bits < 1ULL << (32 - num_fixed); bits++) {
-    u32 rk10n = ((bits << num_fixed)| fixed_bits) & 0xffffff;
+    u32 rk10n = ((bits << num_fixed) | fixed_bits) & 0xffffff;
     u32 rk9n2 = (u32)(((bits << num_fixed) | fixed_bits) >> 24);
 
     if (verbose) {
@@ -360,7 +399,7 @@ static halfloop_result_t ct_attack1(const tuple_t *restrict ct, int num_ct,
           }
           RETURN_ON_ERROR(halfloop_round_tweak(ct[p->a].tweak, 7, &tw8a));
           RETURN_ON_ERROR(halfloop_round_tweak(ct[p->b].tweak, 7, &tw8b));
-          u32 dx70 = ffmul9[x72a ^ x72b];
+          u32 dx70 = ffmul_table_9[x72a ^ x72b];
           u32 dx71 = FFMUL2(x72a ^ x72b) ^ delta;
           u32 dv8 = v8[p->a] ^ v8[p->b];
           u32 dout0 = dv8 >> 16;
@@ -399,11 +438,24 @@ static halfloop_result_t ct_attack1(const tuple_t *restrict ct, int num_ct,
             rk8 = mix_columns(rotate_rows(rk8));
             u8 rk7 = 0;
             u32 keycount = 0;
-            RETURN_ON_ERROR(validate_rk8(ct, v8, num_ct, pairs, num_pairs, rk8,
-                &rk7, &keycount));
+            RETURN_ON_ERROR(validate_rk8(
+                ct,
+                v8,
+                num_ct,
+                pairs,
+                num_pairs,
+                rk8,
+                &rk7,
+                &keycount));
             if ((int)keycount >= tau2) {
-              print_message("Found candidate key: %02x %06x %06x %06x "
-                  "(%d matching pairs)", GREEN, rk7, rk8, rk9n, rk10n,
+              print_message(
+                  "Found candidate key: %02x %06x %06x %06x "
+                  "(%d matching pairs)",
+                  GREEN,
+                  rk7,
+                  rk8,
+                  rk9n,
+                  rk10n,
                   keycount);
               *num_candidates += 1;
               candidate_key_t *tmp = realloc(*candidates,
@@ -455,10 +507,18 @@ error:
  * @param num_candidates return variable for the number of candidate keys in the
  * candidates list.
  */
-static halfloop_result_t ct_attack2(const tuple_t *restrict ct, int num_ct,
-    const tuple_pair_t *restrict pairs, int num_pairs, u32 tau1, u32 tau2,
-    u32 fixed_bits, int num_fixed, bool verbose,
-    candidate_key_t **restrict candidates, u32 *restrict num_candidates) {
+static halfloop_result_t ct_attack2(
+    const tuple_t *restrict ct,
+    int num_ct,
+    const tuple_pair_t *restrict pairs,
+    int num_pairs,
+    u32 tau1,
+    u32 tau2,
+    u32 fixed_bits,
+    int num_fixed,
+    bool verbose,
+    candidate_key_t **restrict candidates,
+    u32 *restrict num_candidates) {
   CHECK_BAD_ARGUMENT(ct == NULL);
   CHECK_BAD_ARGUMENT(num_ct < 2);
   CHECK_BAD_ARGUMENT(pairs == NULL);
@@ -473,7 +533,6 @@ static halfloop_result_t ct_attack2(const tuple_t *restrict ct, int num_ct,
   __m256i y0_table[256] = {0};       /* Lookup table for y0 differences. */
   __m256i y1_table[256 * 255] = {0}; /* Lookup table for y1 differences. */
   __m256i y2_table[256] = {0};       /* Lookup table for y2 differences. */
-  u8 ffmul9[256] = {0}; /* Lookup table for finite field multiplication. */
   u32 *v8 = NULL;       /* Array for precomputed v8 states. */
   u32 *x9 = NULL;       /* Array for precomputed x9 states. */
   u8 *count = 0;        /* Counter for candidate rk8 values. */
@@ -490,16 +549,15 @@ static halfloop_result_t ct_attack2(const tuple_t *restrict ct, int num_ct,
 
   /* Initialize lookup tables. */
   RETURN_ON_ERROR(init_ddt(ddt));
-  for (int i = 0; i < 256; i++) {
-    ffmul9[i] = ffmul(9, (u8)i);
-  }
   for (int ydelta = 0; ydelta < 256; ydelta++) {
     RETURN_ON_ERROR(init_y0_lut((u8)ydelta, y0_table + ydelta));
     RETURN_ON_ERROR(init_y2_lut((u8)ydelta, y2_table + ydelta));
   }
   for (int delta = 1; delta < 256; delta++) {
     for (int y1delta = 0; y1delta < 256; y1delta++) {
-      RETURN_ON_ERROR(init_y1_lut((u8)y1delta, (u8)delta,
+      RETURN_ON_ERROR(init_y1_lut(
+          (u8)y1delta,
+          (u8)delta,
           y1_table + (delta - 1) * 256 + y1delta));
     }
   }
@@ -554,7 +612,7 @@ static halfloop_result_t ct_attack2(const tuple_t *restrict ct, int num_ct,
             u32 bit = (u32)CTZL(ww[i]);
             ww[i] ^= 1ULL << bit;
             u32 dx72 = bit + i * 64; /* x7_2 difference. */
-            u32 dx70 = ffmul9[dx72];
+            u32 dx70 = ffmul_table_9[dx72];
             u32 dx71 = FFMUL2(dx72) ^ delta;
             u32 ddt0 = ddt[((dy7 & 0xff0000) >> 8) | dx70];
             u32 ddt1 = ddt[ (dy7 & 0x00ff00)       | dx71];
@@ -605,11 +663,25 @@ static halfloop_result_t ct_attack2(const tuple_t *restrict ct, int num_ct,
           u32 keycount = 0;
           u32 rk8 = mix_columns(rotate_rows(i));
           printf("rk8: %06x count: %d\n", rk8, count[i]);
-          RETURN_ON_ERROR(validate_rk8(ct, v8, num_ct, pairs, num_pairs, rk8,
-              &rk7, &keycount));
+          RETURN_ON_ERROR(validate_rk8(
+              ct,
+              v8,
+              num_ct,
+              pairs,
+              num_pairs,
+              rk8,
+              &rk7,
+              &keycount));
           if ((int)keycount >= tau2) {
-            print_message("Found candidate key: %02x %06x %06x %06x "
-                "(%d matching pairs)", GREEN, rk7, rk8, rk9n, rk10n, keycount);
+            print_message(
+                "Found candidate key: %02x %06x %06x %06x "
+                "(%d matching pairs)",
+                GREEN,
+                rk7,
+                rk8,
+                rk9n,
+                rk10n,
+                keycount);
             *num_candidates += 1;
             candidate_key_t *tmp = realloc(*candidates,
                 sizeof(u64) * *num_candidates);
@@ -659,10 +731,18 @@ error:
  * @param num_candidates return variable for the number of candidate keys in the
  * candidates list.
  */
-static halfloop_result_t ct_attack3(const tuple_t *restrict ct, int num_ct,
-    const tuple_pair_t *restrict pairs, int num_pairs, u32 tau1, u32 tau2,
-    u32 fixed_bits, int num_fixed, bool verbose,
-    candidate_key_t **restrict candidates, u32 *restrict num_candidates) {
+static halfloop_result_t ct_attack3(
+    const tuple_t *restrict ct,
+    int num_ct,
+    const tuple_pair_t *restrict pairs,
+    int num_pairs,
+    u32 tau1,
+    u32 tau2,
+    u32 fixed_bits,
+    int num_fixed,
+    bool verbose,
+    candidate_key_t **restrict candidates,
+    u32 *restrict num_candidates) {
   CHECK_BAD_ARGUMENT(ct == NULL);
   CHECK_BAD_ARGUMENT(num_ct < 2);
   CHECK_BAD_ARGUMENT(pairs == NULL);
@@ -677,7 +757,6 @@ static halfloop_result_t ct_attack3(const tuple_t *restrict ct, int num_ct,
   __m256i y0_table[256] = {0};       /* Lookup table for y0 differences. */
   __m256i y1_table[256 * 255] = {0}; /* Lookup table for y1 differences. */
   __m256i y2_table[256] = {0};       /* Lookup table for y2 differences. */
-  u8 ffmul9[256] = {0};      /* Lookup table for finite field multiplication. */
   u8 count[0x10000] = {0};   /* Counters for partial candidate rk8 values. */
   u16 keys[512] = {0};       /* Found candidate keys in first search. */
   u32 nkeys = 0;             /* Number of keys in keys array. */
@@ -700,16 +779,15 @@ static halfloop_result_t ct_attack3(const tuple_t *restrict ct, int num_ct,
 
   /* Initialize lookup tables. */
   RETURN_ON_ERROR(init_ddt(ddt));
-  for (int i = 0; i < 256; i++) {
-    ffmul9[i] = ffmul(9, (u8)i);
-  }
   for (int ydelta = 0; ydelta < 256; ydelta++) {
     RETURN_ON_ERROR(init_y0_lut((u8)ydelta, y0_table + ydelta));
     RETURN_ON_ERROR(init_y2_lut((u8)ydelta, y2_table + ydelta));
   }
   for (int delta = 1; delta < 256; delta++) {
     for (int y1delta = 0; y1delta < 256; y1delta++) {
-      RETURN_ON_ERROR(init_y1_lut((u8)y1delta, (u8)delta,
+      RETURN_ON_ERROR(init_y1_lut(
+          (u8)y1delta,
+          (u8)delta,
           y1_table + (delta - 1) * 256 + y1delta));
     }
   }
@@ -769,7 +847,7 @@ static halfloop_result_t ct_attack3(const tuple_t *restrict ct, int num_ct,
             u32 bit = (u32)CTZL(ww[i]);
             ww[i] ^= 1ULL << bit;
             u32 dx72 = bit + i * 64; /* x7_2 difference. */
-            u32 dx70 = ffmul9[dx72];
+            u32 dx70 = ffmul_table_9[dx72];
             u32 dout2 = dy7 & 0xff;
             u32 dout0 = dy7 >> 16;
             u32 idx2 = (dout2 << 8) | dx72;
@@ -816,7 +894,7 @@ static halfloop_result_t ct_attack3(const tuple_t *restrict ct, int num_ct,
           u32 x70b = x70[k0 * num_ct + p->b];
           u32 x72a = x72[k2 * num_ct + p->a];
           u32 x72b = x72[k2 * num_ct + p->b];
-          u32 dx70 = ffmul9[x72a ^ x72b];
+          u32 dx70 = ffmul_table_9[x72a ^ x72b];
           /* Skip pairs that do not match for this partial key. */
           if ((x70a ^ x70b ^ dx70) != 0) {
             continue;
@@ -850,17 +928,30 @@ static halfloop_result_t ct_attack3(const tuple_t *restrict ct, int num_ct,
           while (k1flag[j] != 0) {
             u32 k1bit = (u32)CTZL(k1flag[j]);
             u32 flaggedk1 = (j << 6) | k1bit;
-            u32 rk8 = mix_columns(rotate_rows((k0 << 16) | (flaggedk1 << 8)
-                | k2));
+            u32 rk8 = mix_columns(rotate_rows(
+                (k0 << 16) | (flaggedk1 << 8) | k2));
             u8 rk7 = 0;
             u32 keycount = 0;
             /* Validate the candidate key against the expected v7 difference and
              * recover the MSB of LL^-1(rk7). */
-            RETURN_ON_ERROR(validate_rk8(ct, v8, num_ct, pairs, num_pairs, rk8,
-                &rk7, &keycount));
+            RETURN_ON_ERROR(validate_rk8(
+                ct,
+                v8,
+                num_ct,
+                pairs,
+                num_pairs,
+                rk8,
+                &rk7,
+                &keycount));
             if ((int)keycount >= tau2) {
-              print_message("Found candidate key: %02x %06x %06x %06x "
-                  "(%d matching pairs)", GREEN, rk7, rk8, rk9n, rk10n,
+              print_message(
+                  "Found candidate key: %02x %06x %06x %06x "
+                  "(%d matching pairs)",
+                  GREEN,
+                  rk7,
+                  rk8,
+                  rk9n,
+                  rk10n,
                   keycount);
               *num_candidates += 1;
               candidate_key_t *tmp = realloc(*candidates,
@@ -897,14 +988,15 @@ error:
  * Generates a list of pairs with the required difference from a list of tuples.
  * @param ct a list of ciphertext-tweak tuples.
  * @param num_ct length of ct.
- * @param paired_tuples output variable for a list of paired tuples.
- * @param num_paired output variable for the number of tuples in the list.
  * @param pairs output variable for the generated list of tuple pairs,
  * containing indexes of tuples in the paired_tuples list.
  * @param num_pairs output variable for the number of pairs in the list.
  */
-static halfloop_result_t generate_pairs(const tuple_t *ct, int num_ct,
-    tuple_pair_t **pairs, int *num_pairs) {
+static halfloop_result_t generate_pairs(
+    const tuple_t *ct,
+    int num_ct,
+    tuple_pair_t **pairs,
+    int *num_pairs) {
   CHECK_BAD_ARGUMENT(ct == NULL);
   CHECK_BAD_ARGUMENT(num_ct <= 2);
   CHECK_BAD_ARGUMENT(pairs == NULL);
@@ -947,6 +1039,10 @@ error:
 
 }
 
+/**
+ * Prints tool help information to stdout.
+ * @param name the file name of the tool executable, normally from argv[0].
+ */
 halfloop_result_t print_help(char *name) {
   CHECK_BAD_ARGUMENT(name == NULL);
   printf("Usage: %s [OPTIONS] <filename> <chunk>\n"
@@ -972,9 +1068,9 @@ halfloop_result_t print_help(char *name) {
 #endif
          "  -b            Runs performance benchmarks.\n"
          "  -c p_ct       Set the probability that two randomly selected\n"
-         "                pairs of callsigns will differ only in the least\n"
-         "                significant byte. Entered as the exponential x in\n"
-         "                2^x, -32 >= x < 0. Default value: -10.22.\n"
+         "                callsigns will differ only in the least significant\n"
+         "                byte. Entered as the exponential x in 2^x,\n"
+         "                -32 >= x < 0. Default value: -10.22.\n"
 #ifdef CUDA_ENABLED
          "  -d devlist    Use the specified CUDA devices. Devlist must be a\n"
          "                comma-separated list of device identifiers. The\n"
@@ -998,7 +1094,15 @@ halfloop_result_t print_help(char *name) {
 }
 
 #ifdef CUDA_ENABLED
-static halfloop_result_t parse_devices(struct options *options,
+/**
+ * Called by parse_options to parse a list of comma-separated CUDA device ids
+ * provided by the user.
+ * @param options pointer to an options array, where the devices and num_devices
+ * members will be updated.
+ * @param dev a comma-separated list of CUDA devices.
+ */
+static halfloop_result_t parse_devices(
+    struct options *options,
     const char *devs) {
   CHECK_BAD_ARGUMENT(options == NULL);
   CHECK_BAD_ARGUMENT(devs == NULL);
@@ -1020,6 +1124,9 @@ static halfloop_result_t parse_devices(struct options *options,
     options->num_devices += 1;
     next = strtok_r(NULL, ",", &saveptr);
   }
+#ifdef _WIN32
+#undef strtok_r
+#endif
   /* Check for duplicates. */
   for (int i = 0; i < options->num_devices; i++) {
     for (int j = i + 1; j < options->num_devices; j++) {
@@ -1032,6 +1139,13 @@ error:
 }
 #endif /* CUDA_ENABLED */
 
+/**
+ * Called by parse_options to parse an integer provided by the user.
+ * @param intval return pointer for the integer value.
+ * @param param the string to parse the integer from.
+ * @return HALFLOOP_SUCCESS on success and HALFLOOP_BAD_ARGUMENT on parse
+ * failure.
+ */
 halfloop_result_t parse_int(u32 *intval, const char *param) {
   CHECK_BAD_ARGUMENT(intval == NULL);
   CHECK_BAD_ARGUMENT(param == NULL);
@@ -1042,7 +1156,20 @@ error:
   return err;
 }
 
-halfloop_result_t parse_double(double *d, const char *param, double min,
+/**
+ * Called parse_options to parse a double provided by the user. Also performs
+ * bounds checking on the parsed variable.
+ * @param d return pointer for the parsed double.
+ * @param param the string to parse the double from.
+ * @param min the double minimum value, inclusive.
+ * @param max the double maximum value, inclusive.
+ * @return HALFLOOP_SUCCESS on success and HALFLOOP_BAD_ARGUMENT on parse
+ * failure.
+ */
+halfloop_result_t parse_double(
+    double *d,
+    const char *param,
+    double min,
     double max) {
   CHECK_BAD_ARGUMENT(d == NULL);
   CHECK_BAD_ARGUMENT(param == NULL);
@@ -1054,7 +1181,16 @@ error:
   return err;
 }
 
-halfloop_result_t parse_options(int argc, char *argv[],
+/**
+ * Parses the command line options.
+ * @param argc the argument count supplied to main.
+ * @param argv the argument vector supplied to main.
+ * @param options pointer to the options array to set with the results of the
+ * options parsing.
+ */
+halfloop_result_t parse_options(
+    int argc,
+    char *argv[],
     struct options *options) {
   CHECK_BAD_ARGUMENT(argc < 1);
   CHECK_BAD_ARGUMENT(argv == NULL);
@@ -1089,7 +1225,10 @@ halfloop_result_t parse_options(int argc, char *argv[],
       case 'm': RETURN_ON_ERROR(parse_int(&options->blockmul, optarg)); break;
 #endif
       case 'p': options->profile = true; break;
-      case 's': RETURN_ON_ERROR(parse_double(&options->p_success, optarg, 0,
+      case 's': RETURN_ON_ERROR(parse_double(
+                    &options->p_success,
+                    optarg,
+                    0,
                     1));
                 break;
       case 't': RETURN_ON_ERROR(parse_int(&options->tau1, optarg)); break;
@@ -1117,6 +1256,12 @@ error:
   return err;
 }
 
+/**
+ * Program main function.
+ * @param argc program argument count.
+ * @param argv program argument vector.
+ * @return program return value.
+ */
 int main(int argc, char *argv[]) {
   tuple_t *ct = NULL;
   tuple_pair_t *pairs = NULL;
@@ -1232,57 +1377,127 @@ int main(int argc, char *argv[]) {
       break;
   }
   if (options.tau1 == 0) {
-    RETURN_ON_ERROR(get_tau(num_pairs, num_counters, keys_per_match, p_ct,
-        options.p_success, &options.tau1, &p_tau1));
+    RETURN_ON_ERROR(get_tau(
+        num_pairs,
+        num_counters,
+        keys_per_match,
+        p_ct,
+        options.p_success,
+        &options.tau1,
+        &p_tau1));
   } else {
     if (options.algorithm == GPU_ATTACK2 && options.tau1 >= 16) {
       options.tau1 = 15;
     }
-    RETURN_ON_ERROR(calc_p_success(options.tau1, num_pairs, 0x10000, 63.0,
-        p_ct, &p_tau1));
+    RETURN_ON_ERROR(calc_p_success(
+        options.tau1,
+        num_pairs,
+        0x10000,
+        63.0,
+        p_ct,
+        &p_tau1));
   }
   double p_ct2 = (num_pairs * p_ct)
       / (num_pairs * p_ct + 63.0 * num_pairs / 0x10000);
   if (options.tau2 == 0) {
-    RETURN_ON_ERROR(get_tau(options.tau1, 0x100, 2.02, p_ct2, 0.7,
-        &options.tau2, &p_tau2));
+    RETURN_ON_ERROR(get_tau(
+        options.tau1,
+        0x100,
+        2.02,
+        p_ct2,
+        0.7,
+        &options.tau2,
+        &p_tau2));
   } else {
-    RETURN_ON_ERROR(calc_p_success(options.tau2, options.tau1, 0x100, 2.02,
-        p_ct2, &p_tau2));
+    RETURN_ON_ERROR(calc_p_success(
+        options.tau2,
+        options.tau1,
+        0x100,
+        2.02,
+        p_ct2,
+        &p_tau2));
   }
-  print_message("Setting tau1 = %2d. Success probability: %.3f", WHITE,
-      options.tau1, p_tau1);
-  print_message("Setting tau2 = %2d. Success probability: %.3f", WHITE,
-      options.tau2, p_tau2);
+  print_message(
+      "Setting tau1 = %2d. Success probability: %.3f",
+      WHITE,
+      options.tau1,
+      p_tau1);
+  print_message(
+      "Setting tau2 = %2d. Success probability: %.3f",
+      WHITE,
+      options.tau2,
+      p_tau2);
 
-  print_message("%d fixed bits: %0*x", WHITE, options.num_fixed,
-      options.num_fixed / 4, options.fixed_bits);
+  print_message(
+      "%d fixed bits: %0*x",
+      WHITE,
+      options.num_fixed,
+      options.num_fixed / 4,
+      options.fixed_bits);
 
   hltimer time;
   TIMER_START(&time);
   switch (options.algorithm) {
     case CPU_ATTACK1:
-      RETURN_ON_ERROR(ct_attack1(ct, num_ct, pairs, num_pairs, options.tau1,
-          options.tau2, options.fixed_bits, options.num_fixed, options.verbose,
-          &candidates, &num_candidates));
+      RETURN_ON_ERROR(ct_attack1(
+          ct,
+          num_ct,
+          pairs,
+          num_pairs,
+          options.tau1,
+          options.tau2,
+          options.fixed_bits,
+          options.num_fixed,
+          options.verbose,
+          &candidates,
+          &num_candidates));
       break;
     case CPU_ATTACK2:
-      RETURN_ON_ERROR(ct_attack2(ct, num_ct, pairs, num_pairs, options.tau1,
-          options.tau2, options.fixed_bits, options.num_fixed, options.verbose,
-          &candidates, &num_candidates));
+      RETURN_ON_ERROR(ct_attack2(
+          ct,
+          num_ct,
+          pairs,
+          num_pairs,
+          options.tau1,
+          options.tau2,
+          options.fixed_bits,
+          options.num_fixed,
+          options.verbose,
+          &candidates,
+          &num_candidates));
       break;
     case CPU_ATTACK3:
-      RETURN_ON_ERROR(ct_attack3(ct, num_ct, pairs, num_pairs, options.tau1,
-          options.tau2, options.fixed_bits, options.num_fixed, options.verbose,
-          &candidates, &num_candidates));
+      RETURN_ON_ERROR(ct_attack3(
+          ct,
+          num_ct,
+          pairs,
+          num_pairs,
+          options.tau1,
+          options.tau2,
+          options.fixed_bits,
+          options.num_fixed,
+          options.verbose,
+          &candidates,
+          &num_candidates));
       break;
     case GPU_ATTACK2:
     case GPU_ATTACK3:
 #ifdef CUDA_ENABLED
-      RETURN_ON_ERROR(cuda_ct_attack(options.algorithm, ct, num_ct, pairs,
-          num_pairs, options.tau1, options.tau2, options.blockmul,
-          options.fixed_bits, options.num_fixed, &candidates, &num_candidates,
-          options.verbose, options.profile,
+      RETURN_ON_ERROR(cuda_ct_attack(
+          options.algorithm,
+          ct,
+          num_ct,
+          pairs,
+          num_pairs,
+          options.tau1,
+          options.tau2,
+          options.blockmul,
+          options.fixed_bits,
+          options.num_fixed,
+          &candidates,
+          &num_candidates,
+          options.verbose,
+          options.profile,
           options.num_devices == 0 ? NULL : options.devices,
           options.num_devices));
 #endif
@@ -1294,7 +1509,10 @@ int main(int argc, char *argv[]) {
     print_message("No candidate keys found", RED);
     RETURN_IF(true, HALFLOOP_SUCCESS);
   }
-  print_message("%d candidate%s found", GREEN, num_candidates,
+  print_message(
+      "%d candidate%s found",
+      GREEN,
+      num_candidates,
       num_candidates == 1 ? "" : "s");
 //#ifdef CUDA_ENABLED
 //  RETURN_IF(!options.brute_force, HALFLOOP_SUCCESS);

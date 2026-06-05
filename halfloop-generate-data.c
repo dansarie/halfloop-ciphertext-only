@@ -28,6 +28,11 @@
 #include <string.h>
 #include "halfloop-common.h"
 
+/**
+ * Tests if a character is a valid callsign character.
+ * @param c a character.
+ * @return true of c is a valid callsign character.
+ */
 static bool is_valid_char(char c) {
   return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
 }
@@ -45,26 +50,37 @@ int main(int argc, char *argv[]) {
   halfloop_result_t err = HALFLOOP_SUCCESS;
 
   if (argc != 4) {
-    fprintf(stderr, "Usage: %s <callsign file> <number of bins> "
-                    "<calls per bin>\n\n", argv[0]);
+    fprintf(
+        stderr,
+        "Usage: %s <callsign file> <number of bins> <calls per bin>\n\n",
+        argv[0]);
     return HALFLOOP_BAD_ARGUMENT;
   }
 
   num_bins = atoi(argv[2]);
   if (num_bins <= 0) {
-    fprintf(stderr, "Bad number of bins: %d\n", num_bins);
+    fprintf(
+        stderr,
+        "Bad number of bins: %d\n",
+        num_bins);
     return HALFLOOP_BAD_ARGUMENT;
   }
 
   num_calls = atoi(argv[3]);
   if (num_calls <= 1 || num_calls > 1024) {
-    fprintf(stderr, "Bad number of calls per bin: %d\n", num_calls);
+    fprintf(
+        stderr,
+        "Bad number of calls per bin: %d\n",
+        num_calls);
     return HALFLOOP_BAD_ARGUMENT;
   }
 
   callsign_file = fopen(argv[1], "r");
   if (callsign_file == NULL) {
-    fprintf(stderr, "Error when opening \"%s\": %s\n", argv[1],
+    fprintf(
+        stderr,
+        "Error when opening \"%s\": %s\n",
+        argv[1],
         strerror(errno));
     return HALFLOOP_FILE_ERROR;
   }
@@ -73,12 +89,14 @@ int main(int argc, char *argv[]) {
     if (num_callsigns == alloc_callsigns) {
       alloc_callsigns += 100;
       char *tmp = realloc(callsigns, alloc_callsigns * 3);
-     RETURN_IF(tmp == NULL, HALFLOOP_MEMORY_ERROR);
+      RETURN_IF(tmp == NULL, HALFLOOP_MEMORY_ERROR);
       callsigns = tmp;
     }
     char *cs = callsigns + num_callsigns * 3;
     if (fscanf(callsign_file, "%c%c%c\n", cs, cs + 1, cs + 2) == 3) {
-      if (!(is_valid_char(cs[0]) && is_valid_char(cs[1])
+      if (!(
+          is_valid_char(cs[0])
+          && is_valid_char(cs[1])
           && is_valid_char(cs[2]))) {
         fprintf(stderr, "Ignoring callsign with invalid character.\n");
       } else {
@@ -114,10 +132,27 @@ int main(int argc, char *argv[]) {
   fprintf(stderr, "      rk 8: %06x\n", rk[8]);
   fprintf(stderr, "      rk 9: %06x\n", rk[9]);
   fprintf(stderr, "     rk 10: %06x\n", rk[10]);
-  char *month[] = {"January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December"};
-  fprintf(stderr, "Start time: %d %s %02d:%02d:00\n", tweak.day,
-      month[tweak.month - 1], tweak.coarse_time / 60, tweak.coarse_time % 60);
+  char *month[] = {
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December"
+  };
+  fprintf(
+      stderr,
+      "Start time: %d %s %02d:%02d:00\n",
+      tweak.day,
+      month[tweak.month - 1],
+      tweak.coarse_time / 60,
+      tweak.coarse_time % 60);
   fprintf(stderr, " Frequency: %d Hz\n", tweak.frequency);
 
   for (int bin = 0; bin < num_bins; bin++) {

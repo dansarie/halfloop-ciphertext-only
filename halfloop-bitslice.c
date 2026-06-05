@@ -282,7 +282,8 @@ static eightbits multiply6(eightbits in) {
     .b1 = _mm256_xor_si256(in.b2, in.b3),
     .b2 = _mm256_xor_si256(_mm256_xor_si256(in.b0, in.b3), in.b4),
     .b3 = _mm256_xor_si256(_mm256_xor_si256(in.b1, in.b4), in.b5),
-    .b4 = _mm256_xor_si256(_mm256_xor_si256(in.b0, in.b1),
+    .b4 = _mm256_xor_si256(
+        _mm256_xor_si256(in.b0, in.b1),
         _mm256_xor_si256(in.b5, in.b6)),
     .b5 = _mm256_xor_si256(_mm256_xor_si256(in.b0, in.b6), in.b7),
     .b6 = _mm256_xor_si256(in.b1, in.b7),
@@ -318,10 +319,14 @@ static eightbits multiply39(eightbits in) {
     .b2 = _mm256_xor_si256(in.b4, in.b7),
     .b3 = in.b5,
     .b4 = _mm256_xor_si256(_mm256_xor_si256(in.b2, in.b5), in.b6),
-    .b5 = _mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(in.b0, in.b2),
-        _mm256_xor_si256(in.b3, in.b5)), _mm256_xor_si256(in.b6, in.b7)),
-    .b6 = _mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(in.b0, in.b1),
-        _mm256_xor_si256(in.b3, in.b4)), _mm256_xor_si256(in.b6, in.b7)),
+    .b5 = _mm256_xor_si256(
+        _mm256_xor_si256(_mm256_xor_si256(in.b0, in.b2),
+                         _mm256_xor_si256(in.b3, in.b5)),
+        _mm256_xor_si256(in.b6, in.b7)),
+    .b6 = _mm256_xor_si256(
+        _mm256_xor_si256(_mm256_xor_si256(in.b0, in.b1),
+                         _mm256_xor_si256(in.b3, in.b4)),
+        _mm256_xor_si256(in.b6, in.b7)),
     .b7 = _mm256_xor_si256(_mm256_xor_si256(in.b1, in.b4), in.b7)
   };
   return out;
@@ -455,23 +460,35 @@ halfloop_result_t halfloop_bitslice(u32 cta, u32 ctb, u64 tw, u32 rk7n,
     rk.msb = get_eightbits((u8)(rk5 >> 16));
     rk.mid = get_eightbits((u8)(rk5 >> 8));
     rk.lsb = get_eightbits((u8)twa[5]);
-    rk.lsb.b0 = _mm256_xor_si256(rk.lsb.b0, _mm256_set_epi64x(
-        0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL,
-        0x0000000000000000ULL, 0x0000000000000000ULL));
-    rk.lsb.b1 = _mm256_xor_si256(rk.lsb.b1, _mm256_set_epi64x(
-        0xFFFFFFFFFFFFFFFFULL, 0x0000000000000000ULL,
-        0xFFFFFFFFFFFFFFFFULL, 0x0000000000000000ULL));
-    rk.lsb.b2 = _mm256_xor_si256(rk.lsb.b2,
+    rk.lsb.b0 = _mm256_xor_si256(
+        rk.lsb.b0,
+        _mm256_set_epi64x(0xFFFFFFFFFFFFFFFFULL,
+                          0xFFFFFFFFFFFFFFFFULL,
+                          0x0000000000000000ULL,
+                          0x0000000000000000ULL));
+    rk.lsb.b1 = _mm256_xor_si256(
+        rk.lsb.b1,
+        _mm256_set_epi64x(0xFFFFFFFFFFFFFFFFULL,
+                          0x0000000000000000ULL,
+                          0xFFFFFFFFFFFFFFFFULL,
+                          0x0000000000000000ULL));
+    rk.lsb.b2 = _mm256_xor_si256(
+        rk.lsb.b2,
         _mm256_set1_epi64x(0xFFFFFFFF00000000ULL));
-    rk.lsb.b3 = _mm256_xor_si256(rk.lsb.b3,
+    rk.lsb.b3 = _mm256_xor_si256(
+        rk.lsb.b3,
         _mm256_set1_epi64x(0xFFFF0000FFFF0000ULL));
-    rk.lsb.b4 = _mm256_xor_si256(rk.lsb.b4,
+    rk.lsb.b4 = _mm256_xor_si256(
+        rk.lsb.b4,
         _mm256_set1_epi64x(0xFF00FF00FF00FF00ULL));
-    rk.lsb.b5 = _mm256_xor_si256(rk.lsb.b5,
+    rk.lsb.b5 = _mm256_xor_si256(
+        rk.lsb.b5,
         _mm256_set1_epi64x(0xF0F0F0F0F0F0F0F0ULL));
-    rk.lsb.b6 = _mm256_xor_si256(rk.lsb.b6,
+    rk.lsb.b6 = _mm256_xor_si256(
+        rk.lsb.b6,
         _mm256_set1_epi64x(0xCCCCCCCCCCCCCCCCULL));
-    rk.lsb.b7 = _mm256_xor_si256(rk.lsb.b7,
+    rk.lsb.b7 = _mm256_xor_si256(
+        rk.lsb.b7,
         _mm256_set1_epi64x(0xAAAAAAAAAAAAAAAAULL));
     statea = bitslice_inv_round(statea, rk);
     stateb = bitslice_inv_round(stateb, rk);
@@ -502,7 +519,8 @@ halfloop_result_t halfloop_bitslice(u32 cta, u32 ctb, u64 tw, u32 rk7n,
 
     /* We can check for equality of the plaintexts without adding rk0 and rk1 by
      * flipping the single bit that differs between the tweaks. */
-    stateb.mid.b1 = _mm256_xor_si256(stateb.mid.b1,
+    stateb.mid.b1 = _mm256_xor_si256(
+        stateb.mid.b1,
         _mm256_set1_epi32(0xffffffff));
 
     /* Compare plaintexts. */
@@ -684,11 +702,21 @@ halfloop_result_t halfloop_benchmark_bitslice(void) {
   print_message("Benchmarking CPU bitslice algorithm.", WHITE);
   hltimer timer;
   TIMER_START(&timer);
-  RETURN_ON_ERROR(halfloop_bitslice(ct0, ct1, tweak, rk[7], rk[8], rk[9],
-      rk[10], &found, &num_found));
+  RETURN_ON_ERROR(halfloop_bitslice(
+      ct0,
+      ct1,
+      tweak,
+      rk[7],
+      rk[8],
+      rk[9],
+      rk[10],
+      &found,
+      &num_found));
   TIMER_STOP(&timer);
   double elapsed = timer_elapsed(timer);
-  print_message("Number of keys found during bitslice test: %d.", WHITE,
+  print_message(
+      "Number of keys found during bitslice test: %d.",
+      WHITE,
       num_found);
 
   bool ok = false;
@@ -699,17 +727,29 @@ halfloop_result_t halfloop_benchmark_bitslice(void) {
   }
   RETURN_IF(!ok, HALFLOOP_INTERNAL_ERROR);
 #ifdef _WIN32
-  print_message("Benchmark took %.2f seconds: %lld keys/second.", WHITE,
-    elapsed, (u64)(0x100000000ULL / elapsed));
+  print_message(
+      "Benchmark took %.2f seconds: %lld keys/second.",
+      WHITE,
+      elapsed,
+      (u64)(0x100000000ULL / elapsed));
 #else /* _WIN32 */
   setlocale(LC_NUMERIC, "");
-  print_message("Benchmark took %.2f seconds: %'lld keys/second.", WHITE,
-      elapsed, (u64)(0x100000000ULL / elapsed));
+  print_message(
+      "Benchmark took %.2f seconds: %'lld keys/second.",
+      WHITE,
+      elapsed,
+      (u64)(0x100000000ULL / elapsed));
 #endif /* _WIN32 */
 error:
   if (err != HALFLOOP_SUCCESS) {
-    print_message("Bitslice benchmark failed. PT=%06x tweak=%016" PRIx64
-        " Key=%016" PRIx64 "%016" PRIx64, RED, pt, tweak, key.hi, key.lo);
+    print_message(
+        "Bitslice benchmark failed. PT=%06x tweak=%016" PRIx64 " Key=%016"
+            PRIx64 "%016" PRIx64,
+        RED,
+        pt,
+        tweak,
+        key.hi,
+        key.lo);
   }
   free(found);
   return err;

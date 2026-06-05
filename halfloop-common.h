@@ -131,14 +131,21 @@ static const u8 inv_SBOX[256] = {
   0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d
 };
 
+/** Lookup table for finite field multiplication by 2 in F^8_2. */
 extern u8 ffmul_table_2[0x100];
+/** Lookup table for finite field multiplication by 6 in F^8_2. */
 extern u8 ffmul_table_6[0x100];
+/** Lookup table for finite field multiplication by 8 in F^8_2. */
 extern u8 ffmul_table_8[0x100];
+/** Lookup table for finite field multiplication by 9 in F^8_2. */
 extern u8 ffmul_table_9[0x100];
+/** Lookup table for finite field multiplication by 39 in F^8_2. */
 extern u8 ffmul_table_39[0x100];
 
-/** Return values for functions. Functions returning without error will always
- * return HALFLOOP_SUCCESS. */
+/**
+ * Return values for functions. Functions returning without error will always
+ * return HALFLOOP_SUCCESS.
+ */
 typedef enum {
   HALFLOOP_SUCCESS = 0,     /**< The function performed its task
                                  successfully. */
@@ -227,6 +234,7 @@ typedef struct {
     @param D denominator */
 #define CEIL_DIV(N, D) (((N) + (D) - 1) / (D))
 
+/** Min function. Returns the lower value of X and Y. */
 #define MIN(X, Y) ((X) <= (Y) ? (X) : (Y))
 
 /** Fast branch-free finite field multiplication by 2. */
@@ -262,8 +270,12 @@ typedef struct {
   halfloop_result_t e = E;\
   if (C) {\
     if (e != HALFLOOP_SUCCESS) {\
-      fprintf(stderr, "%s on line %d in %s.\n", halfloop_get_result_text(e), \
-          __LINE__, __FILE__);\
+      fprintf(\
+          stderr,\
+          "%s on line %d in %s.\n",\
+          halfloop_get_result_text(e),\
+          __LINE__,\
+          __FILE__);\
     }\
     err = e;\
     goto error;\
@@ -279,13 +291,17 @@ typedef struct {
 {\
   halfloop_result_t e = E;\
   if (e != HALFLOOP_SUCCESS) {\
-    fprintf(stderr, "%s on line %d in %s.\n", halfloop_get_result_text(e), \
-        __LINE__, __FILE__);\
+    fprintf(\
+        stderr,\
+        "%s on line %d in %s.\n",\
+        halfloop_get_result_text(e),\
+        __LINE__,\
+        __FILE__);\
     err = e;\
     goto error;\
   }\
 }
-
+/** Prints an error and returns HALFLOOP_BAD_ARGUMENT if C is true. */
 #define CHECK_BAD_ARGUMENT(C)\
 {\
   if (C) {\
@@ -299,14 +315,17 @@ typedef struct {
 
 #ifdef _WIN32
 
+/** Timer type. */
 typedef LARGE_INTEGER hltimer;
 
+/** Starts a timer, represented by a hltimer variable. */
 #define TIMER_START(T)\
   if (!QueryPerformanceCounter(T)) {\
     err = HALFLOOP_INTERNAL_ERROR;\
     goto error;\
   }
 
+/** Stops a timer, represented by a hltimer variable. */
 #define TIMER_STOP(T)\
   {\
     LARGE_INTEGER stop_time;\
@@ -317,19 +336,31 @@ typedef LARGE_INTEGER hltimer;
     (T)->QuadPart = stop_time.QuadPart - (T)->QuadPart;\
   }
 
+/**
+ * Returns one plus the index of the least significant 1-bit of v, or if v is
+ * zero, returns zero.
+ */
 int ffsl(u64 v);
+
+/**
+ * Returns the number of leading 0-bits in v, starting at the most significant
+ * bit position. If v is 0, the result is undefined.
+ */
 int clz(u64 v);
 
 #else /* _WIN32 */
 
+/** Timer type. */
 typedef struct timespec hltimer;
 
+/** Starts a timer, represented by a hltimer variable. */
 #define TIMER_START(T)\
   if (clock_gettime(CLOCK_MONOTONIC, T) != 0) {\
     err = HALFLOOP_INTERNAL_ERROR;\
     goto error;\
   }
 
+/** Stops a timer, represented by a hltimer variable. */
 #define TIMER_STOP(T)\
   {\
     struct timespec stop_time;\
@@ -348,17 +379,27 @@ typedef struct timespec hltimer;
 
 #endif /* _WIN32 */
 
+/**
+ * Returns the minutes part of a stopped timer.
+ * @param t a stopped timer variable.
+ * @return the number of whole minutes elapsed.
+ */
 u64 timer_minutes(hltimer t);
-u64 timer_seconds(hltimer t);
-double timer_elapsed(hltimer t);
 
 /**
- * Performs finite field multiplication in F^8_2.
- * @param a term a.
- * @param b term b.
- * @return the product.
+ * Returns the seconds part of a stopped timer.
+ * @param t a stopped timer variable.
+ * @return the number of whole seconds elapsed, in addition to the number of
+ * minutes returned by timer_minutes for the same variable.
  */
-u8 ffmul(u8 a, u8 b);
+u64 timer_seconds(hltimer t);
+
+/**
+ * Returns the number of seconds indicated by a stopped timer.
+ * @param t a stopped timer variable.
+ * @return the total time elapsed.
+ */
+double timer_elapsed(hltimer t);
 
 /**
  * @brief Returns the text (e.g. HALFLOOP_SUCCESS) for a given sentinel_result_t
@@ -611,8 +652,15 @@ halfloop_result_t init_y2_lut(u8 y2delta, __m256i *lut);
  * @param key return variable for the candidate for the MSB of LL^-1(rk7).
  * @param num number of pairs that matched the required v7 and x6 differences.
  */
-halfloop_result_t validate_rk8(const tuple_t *ct, const u32 *v8, int num_ct,
-    const tuple_pair_t *pairs, int num_pairs, u32 rk8, u8 *key, u32 *num);
+halfloop_result_t validate_rk8(
+    const tuple_t *ct,
+    const u32 *v8,
+    int num_ct,
+    const tuple_pair_t *pairs,
+    int num_pairs,
+    u32 rk8,
+    u8 *key,
+    u32 *num);
 
 #ifdef __cplusplus
 }

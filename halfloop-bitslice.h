@@ -46,8 +46,16 @@ extern "C" {
  * @param num_found returns the number of keys in found.
  * @return halfloop_result_t HALFLOOP_SUCCESS on success.
  */
-halfloop_result_t halfloop_bitslice(u32 ct0, u32 ct1, u64 tw0, u32 rk7, u32 rk8,
-    u32 rk9, u32 rk10, u32 **found, int *num_found);
+halfloop_result_t halfloop_bitslice(
+    u32 ct0,
+    u32 ct1,
+    u64 tw0,
+    u32 rk7,
+    u32 rk8,
+    u32 rk9,
+    u32 rk10,
+    u32 **found,
+    int *num_found);
 
 /**
  * Runs a benchmark on the bitslice implementation.

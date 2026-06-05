@@ -92,9 +92,14 @@ double timer_elapsed(hltimer t) {
 }
 #endif /* _WIN32 */
 
-/* Used by init_halfloop to initialize the finite field multiplication lookup
- * tables. */
-u8 ffmul(u8 a, u8 b) {
+/**
+ * Performs finite field multiplication in F^8_2. Used by init_halfloop to
+ * initialize the finite field multiplication lookup tables.
+ * @param a term a.
+ * @param b term b.
+ * @return the product.
+ */
+static u8 ffmul(u8 a, u8 b) {
   u32 c = 0;
 
   for (int x = 0; x < 8; x++) {
@@ -382,15 +387,27 @@ halfloop_result_t print_message(const char *format, color_t color, ...) {
 #ifdef _WIN32
   SYSTEMTIME st;
   GetLocalTime(&st);
-  printf("[%02d:%02d:%02d] %s%s%s\n", st.wHour, st.wMinute, st.wSecond,
-    colorstring, str, normal_color);
+  printf(
+      "[%02d:%02d:%02d] %s%s%s\n",
+      st.wHour,
+      st.wMinute,
+      st.wSecond,
+      colorstring,
+      str,
+      normal_color);
 #else /* _WIN32 */
   struct timeval tv;
   struct tm tm;
   RETURN_IF(gettimeofday(&tv, NULL) != 0, HALFLOOP_INTERNAL_ERROR);
   localtime_r(&tv.tv_sec, &tm);
-  printf("[%02d:%02d:%02d] %s%s%s\n", tm.tm_hour, tm.tm_min, tm.tm_sec,
-      colorstring, str, normal_color);
+  printf(
+      "[%02d:%02d:%02d] %s%s%s\n",
+      tm.tm_hour,
+      tm.tm_min,
+      tm.tm_sec,
+      colorstring,
+      str,
+      normal_color);
 #endif
 
 error:
@@ -476,7 +493,10 @@ halfloop_result_t create_tweak(tweak_t values, u64 *tweak) {
 #ifdef _WIN32
 halfloop_result_t random_bytes(void* b, size_t num) {
   halfloop_result_t err = HALFLOOP_SUCCESS;
-  RETURN_IF(BCryptGenRandom(NULL, b, (ULONG)num, BCRYPT_USE_SYSTEM_PREFERRED_RNG),
+  RETURN_IF(BCryptGenRandom(NULL,
+                            b,
+                            (ULONG)num,
+                            BCRYPT_USE_SYSTEM_PREFERRED_RNG),
       HALFLOOP_INTERNAL_ERROR);
 error:
   return err;
@@ -594,8 +614,15 @@ halfloop_result_t init_y2_lut(u8 y2delta, __m256i *lut) {
  * @param key return variable for the candidate for the MSB of LL^-1(rk7).
  * @param num number of pairs that matched the required v7 and x6 differences.
  */
-halfloop_result_t validate_rk8(const tuple_t *ct, const u32 *v8, int num_ct,
-    const tuple_pair_t *pairs, int num_pairs, u32 rk8, u8 *key, u32 *num) {
+halfloop_result_t validate_rk8(
+    const tuple_t *ct,
+    const u32 *v8,
+    int num_ct,
+    const tuple_pair_t *pairs,
+    int num_pairs,
+    u32 rk8,
+    u8 *key,
+    u32 *num) {
   CHECK_BAD_ARGUMENT(ct == NULL);
   CHECK_BAD_ARGUMENT(v8 == NULL);
   CHECK_BAD_ARGUMENT(num_ct < 2);
