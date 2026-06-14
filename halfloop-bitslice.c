@@ -21,6 +21,7 @@
 #define _GNU_SOURCE
 #include <immintrin.h>
 #include <locale.h>
+#include <string.h>
 
 #include "halfloop-bitslice.h"
 #include "halfloop-common.h"
@@ -379,8 +380,36 @@ static twentyfourbits bitslice_inv_round(twentyfourbits state,
   return out;
 }
 
-halfloop_result_t halfloop_bitslice(u32 cta, u32 ctb, u64 tw, u32 rk7n,
-    u32 rk8n, u32 rk9n, u32 rk10n, u32 **found, int *num_found) {
+hlkey halfloop_bitslice_revert_key(
+    u32 rk56,
+    u32 rk7,
+    u32 rk8,
+    u32 rk9,
+    u32 rk10) {
+  hlkey key1 = {
+    .hi = 0,
+    .lo = ((u64)rk8 << 40) | ((u64)rk9 << 16) | (rk10 >> 8)
+  };
+  u32 g = key_schedule_g((u32)key1.lo, 2);
+  key1.hi = ((u64)((g >> 24) ^ rk10) << 56) | ((u64)rk56 << 24) | rk7;
+  hlkey key0 = {0};
+  key0.lo = (key1.lo >> 32) ^ (u32)key1.lo;
+  key0.lo |= ((key1.lo >> 32) ^ key1.hi) << 32;
+  key0.hi = (key1.hi >> 32) ^ (u32)key1.hi;
+  key0.hi |= ((key1.hi >> 32) ^ key_schedule_g((u32)key0.lo, 1)) << 32;
+  return key0;
+}
+
+halfloop_result_t halfloop_bitslice(
+    u32 cta,
+    u32 ctb,
+    u64 tw,
+    u32 rk7n,
+    u32 rk8n,
+    u32 rk9n,
+    u32 rk10n,
+    hlkey **found,
+    int *num_found) {
   CHECK_BAD_ARGUMENT(cta   & 0xff000000);
   CHECK_BAD_ARGUMENT(ctb   & 0xff000000);
   CHECK_BAD_ARGUMENT(rk7n  & 0xff000000);
@@ -395,7 +424,7 @@ halfloop_result_t halfloop_bitslice(u32 cta, u32 ctb, u64 tw, u32 rk7n,
   halfloop_result_t err = HALFLOOP_SUCCESS;
 
   int alloc = 300;
-  *found = malloc(alloc * sizeof(u32));
+  *found = malloc(alloc * sizeof(hlkey));
   RETURN_IF(*found == NULL, HALFLOOP_MEMORY_ERROR);
 
   /* Prepare round tweaks. */
@@ -411,7 +440,9 @@ halfloop_result_t halfloop_bitslice(u32 cta, u32 ctb, u64 tw, u32 rk7n,
     twb[i] ^= tw0[i];
   }
   RETURN_ON_ERROR(halfloop_round10_tweak(tw, rk9n & 0xff, twa + 10));
-  RETURN_ON_ERROR(halfloop_round10_tweak(tw ^ (1 << 30), rk9n & 0xff,
+  RETURN_ON_ERROR(halfloop_round10_tweak(
+      tw ^ (1 << 30),
+      rk9n & 0xff,
       twb + 10));
 
   /* Calculate x6 and known round keys. */
@@ -557,14 +588,25 @@ halfloop_result_t halfloop_bitslice(u32 cta, u32 ctb, u64 tw, u32 rk7n,
       while (cmpa[i] != 0) {
         if (*num_found == alloc) {
           alloc += 300;
-          u32 *tmp = realloc(*found, alloc * sizeof(u32));
+          hlkey *tmp = realloc(*found, alloc * sizeof(hlkey));
           RETURN_IF(tmp == NULL, HALFLOOP_MEMORY_ERROR);
           *found = tmp;
         }
         int low6 = FFSL(cmpa[i]) - 1;
-        (*found)[*num_found] = (((i << 6) | low6) << 24) | (u32)rk6;
         cmpa[i] ^= 1ULL << low6;
-        *num_found += 1;
+        u32 rk56 = (((i << 6) | low6) << 24) | (u32)rk6;
+        hlkey key = halfloop_bitslice_revert_key(
+            rk56,
+            rk7n,
+            rk8n,
+            rk9n,
+            rk10n);
+        u32 pt = 0;
+        RETURN_ON_ERROR(halfloop_decrypt(cta, key, tw, &pt));
+        if (halfloop_valid_plaintext(pt)) {
+          (*found)[*num_found] = key;
+          *num_found += 1;
+        }
       }
     }
   }
@@ -686,18 +728,16 @@ halfloop_result_t halfloop_benchmark_bitslice(void) {
   u64 tweak = 0;
   hlkey key = {0};
   u32 rk[11];
-  u32 *found = NULL;
+  hlkey *found = NULL;
   int num_found = 0;
   halfloop_result_t err = HALFLOOP_SUCCESS;
 
-  RETURN_ON_ERROR(random_bytes(&pt, sizeof(u32)));
+  pt = (2 << 21) | ('A' << 14) | ('B' << 7) | 'C';
   RETURN_ON_ERROR(random_bytes(&tweak, sizeof(u64)));
   RETURN_ON_ERROR(random_bytes(&key, sizeof(hlkey)));
-  pt &= 0xffffff;
   RETURN_ON_ERROR(halfloop_encrypt(pt, key, tweak, &ct0));
   RETURN_ON_ERROR(halfloop_encrypt(pt, key, tweak ^ (1 << 30), &ct1));
   RETURN_ON_ERROR(key_schedule(rk, key, 0));
-  u32 rk56 = ((rk[5] & 0xff) << 24) | rk[6];
 
   print_message("Benchmarking CPU bitslice algorithm.", WHITE);
   hltimer timer;
@@ -721,7 +761,7 @@ halfloop_result_t halfloop_benchmark_bitslice(void) {
 
   bool ok = false;
   for (int i = 0; i < num_found && !ok; i++) {
-    if (rk56 == found[i]) {
+    if (memcmp(&key, found + i, sizeof(hlkey)) == 0) {
       ok = true;
     }
   }

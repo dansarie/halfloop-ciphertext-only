@@ -116,8 +116,40 @@ halfloop_result_t halfloop_cuda_bitslice(
     u32 rk8,
     u32 rk9,
     u32 rk10,
-    u32 **found,
+    hlkey **found,
     int *num_found);
+
+/**
+ * Recovers the unknown 48 bits of the key through a brute force attack.
+ * @param ct0 a ciphertext from a 2G ALE "TO" word.
+ * @param ct1 a second ciphertext, which is highly likely to have the same
+ * plaintext as ct0 and where the only tweak difference is that the tweak for
+ * ct0 has word number 1 and the tweak for ct2 has word number 2.
+ * @param tw0 the tweak for ct0.
+ * @param rk7 the most significant byte of LL^-1(round key 7), normalized.
+ * @param rk8 round key 8, normalized.
+ * @param rk9 round key 9, normalized.
+ * @param rk10 round key 10, normalized.
+ * @param devices a list of CUDA device ids to use for the search, or NULL to
+ * use all available devices.
+ * @param num_devices number of device ids in the devices list.
+ * @param verbose increases verbosity when set to true.
+ * @param found return variable for the found key.
+ */
+halfloop_result_t halfloop_cuda_bitslice_all(
+    const u32 ct0,
+    const u32 ct1,
+    const u64 tw0,
+    const tuple_t *tuples,
+    int num_tuples,
+    u8 rk7,
+    u32 rk8,
+    u32 rk9,
+    u32 rk10,
+    int *devices,
+    int num_devices,
+    bool verbose,
+    hlkey *found);
 
 /**
  * Runs a ciphertext-only attack on HALFLOOP, recovering rk8, rk9, rk10, and one

@@ -85,44 +85,42 @@ static int compare_tuples(const void *tuple1, const void *tuple2) {
   return 0;
 }
 
-//#ifdef CUDA_ENABLED
-///** Used by qsort to sort candidate keys. */
-//static int compare_candidates(const void *candidate1, const void *candidate2) {
-//  candidate_key_t *c1 = (candidate_key_t*)candidate1;
-//  candidate_key_t *c2 = (candidate_key_t*)candidate2;
-//  if (c1->pairs > c2->pairs) {
-//    return -1;
-//  }
-//  if (c1->pairs < c2->pairs) {
-//    return 1;
-//  }
-//  if (c1->rk7 < c2->rk7) {
-//    return -1;
-//  }
-//  if (c1->rk7 > c2->rk7) {
-//    return 1;
-//  }
-//  if (c1->rk8 < c2->rk8) {
-//    return -1;
-//  }
-//  if (c1->rk8 > c2->rk8) {
-//    return 1;
-//  }
-//  if (c1->rk9 < c2->rk9) {
-//    return -1;
-//  }
-//  if (c1->rk9 > c2->rk9) {
-//    return 1;
-//  }
-//  if (c1->rk10 < c2->rk10) {
-//    return -1;
-//  }
-//  if (c1->rk10 > c2->rk10) {
-//    return 1;
-//  }
-//  return 0;
-//}
-//#endif
+/** Used by qsort to sort candidate keys. */
+static int compare_candidates(const void *candidate1, const void *candidate2) {
+  candidate_key_t *c1 = (candidate_key_t*)candidate1;
+  candidate_key_t *c2 = (candidate_key_t*)candidate2;
+  if (c1->pairs > c2->pairs) {
+    return -1;
+  }
+  if (c1->pairs < c2->pairs) {
+    return 1;
+  }
+  if (c1->rk7 < c2->rk7) {
+    return -1;
+  }
+  if (c1->rk7 > c2->rk7) {
+    return 1;
+  }
+  if (c1->rk8 < c2->rk8) {
+    return -1;
+  }
+  if (c1->rk8 > c2->rk8) {
+    return 1;
+  }
+  if (c1->rk9 < c2->rk9) {
+    return -1;
+  }
+  if (c1->rk9 > c2->rk9) {
+    return 1;
+  }
+  if (c1->rk10 < c2->rk10) {
+    return -1;
+  }
+  if (c1->rk10 > c2->rk10) {
+    return 1;
+  }
+  return 0;
+}
 
 /**
  * @brief Reads ciphertext-tweak tuples from a text file.
@@ -1273,17 +1271,16 @@ int main(int argc, char *argv[]) {
   double p_tau1 = 0.0;
   double p_tau2 = 0.0;
   char *device_names = NULL;
-  //u32 *brute_found = NULL;
-  //int num_brute_found = 0;
   struct options options = {
     .benchmark = false,
     .listdevs = false,
     .verbose = false,
     .profile = false,
-    .brute_force = true,
 #ifdef CUDA_ENABLED
+    .brute_force = true,
     .algorithm = GPU_ATTACK3,
 #else
+    .brute_force = false,
     .algorithm = CPU_ATTACK3,
 #endif
     .filename = NULL,
@@ -1514,57 +1511,84 @@ int main(int argc, char *argv[]) {
       GREEN,
       num_candidates,
       num_candidates == 1 ? "" : "s");
-//#ifdef CUDA_ENABLED
-//  RETURN_IF(!options.brute_force, HALFLOOP_SUCCESS);
-//  u32 brute_ct[4] = {0};
-//  u64 brute_tw[4] = {0};
-//  int found_pairs = 0;
-//  for (u32 i = 0; i < num_ct && found_pairs < 2; i++) {
-//    for (u32 j = i + 1; j < num_ct; j++) {
-//      if ((ct[i].tweak ^ (1 << 30)) == ct[j].tweak) {
-//        brute_ct[found_pairs * 2]     = ct[i].ct;
-//        brute_ct[found_pairs * 2 + 1] = ct[j].ct;
-//        brute_tw[found_pairs * 2]     = ct[i].tweak;
-//        brute_tw[found_pairs * 2 + 1] = ct[j].tweak;
-//        found_pairs += 1;
-//        break;
-//      }
-//    }
-//  }
-//  if (found_pairs != 2) {
-//    print_message("Could not find suitable pairs for brute force key search",
-//        RED);
-//    RETURN_IF(true, HALFLOOP_SUCCESS);
-//  }
-//  for (u32 i = 0; i < 4; i++) {
-//    print_message("Brute force ciphertext %d: %06x %016" PRIx64, WHITE, i + 1,
-//        brute_ct[i], brute_tw[i]);
-//  }
-//  qsort(candidates, num_candidates, sizeof(candidate_key_t),
-//      compare_candidates);
-//  for (u32 i = 0; i < num_candidates; i++) {
-//    candidate_key_t *c = candidates + i;
-//    print_message("Testing candidate key %02x %06x %06x %06x", WHITE, c->rk7,
-//        c->rk8, c->rk9, c->rk10);
-//    for (u32 rk701 = 0; rk701 < 0x10000; rk701++) {
-//      u32 rk7 = (rk701 << 8) | c->rk7;
-//      RETURN_ON_ERROR(halfloop_cuda_bitslice(brute_ct[0], brute_ct[1],
-//          brute_tw[0], rk7, c->rk8, c->rk9, c->rk10, &brute_found,
-//          &num_brute_found));
-//      print_message("Found %d", GREEN, num_brute_found);
-//      //for (int f = 0; f < num_brute_found; f++) {
-//      //  print_message("Found: %08x", GREEN, brute_found[f]);
-//      //}
-//      FREE_AND_NULL(brute_found);
-//    }
-//  }
-//#endif
+
+  RETURN_IF(!options.brute_force, HALFLOOP_SUCCESS);
+#ifdef CUDA_ENABLED
+  u32 ct0 = 0;
+  u32 ct1 = 0;
+  u64 tw0 = 0;
+  bool found_pair = false;
+  for (u32 i = 0; i < num_ct && !found_pair; i++) {
+    for (u32 j = i + 1; j < num_ct && !found_pair; j++) {
+      if ((ct[i].tweak ^ (1 << 30)) == ct[j].tweak) {
+        ct0 = ct[i].ct;
+        ct1 = ct[j].ct;
+        tw0 = ct[i].tweak;
+        found_pair = true;
+      }
+    }
+  }
+  if (!found_pair) {
+    print_message("Could not find suitable for brute force key search", RED);
+    RETURN_IF(true, HALFLOOP_FAILURE);
+  }
+  print_message(
+      "Brute force ct0: %06x ct1: %06x tw0: %016" PRIx64,
+      WHITE,
+      ct0,
+      ct1,
+      tw0);
+  qsort(
+      candidates,
+      num_candidates,
+      sizeof(candidate_key_t),
+      compare_candidates);
+  for (u32 i = 0; i < num_candidates; i++) {
+    candidate_key_t *c = candidates + i;
+    print_message(
+        "Testing candidate key %02x %06x %06x %06x (%u matches)",
+        WHITE,
+        c->rk7,
+        c->rk8,
+        c->rk9,
+        c->rk10,
+        c->pairs);
+    hlkey found = {0};
+    err = halfloop_cuda_bitslice_all(
+        ct0,
+        ct1,
+        tw0,
+        ct,
+        num_ct,
+        c->rk7,
+        c->rk8,
+        c->rk9,
+        c->rk10,
+        options.devices,
+        options.num_devices,
+        options.verbose,
+        &found);
+
+    if (err == HALFLOOP_SUCCESS) {
+      print_message(
+          "Found key: %016" PRIx64 "%016" PRIx64,
+          GREEN,
+          found.hi,
+          found.lo);
+      RETURN_IF(true, HALFLOOP_SUCCESS);
+    } else if (err == HALFLOOP_FAILURE) {
+      err = HALFLOOP_SUCCESS;
+    }
+    RETURN_ON_ERROR(err);
+  }
+
+  print_message("No matching key found.", RED);
+#endif /* CUDA_ENABLED */
 
 error:
   free(device_names);
   free(candidates);
   free(ct);
   free(pairs);
-  //free(brute_found);
   return err;
 }

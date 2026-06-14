@@ -215,7 +215,7 @@ typedef struct {
 /** Represents an 80-bit candidate partial key found during search. */
 typedef struct {
   u32 pairs; /**< Number of pairs matching the key. */
-  u32 rk7;   /**< One byte of round key 7. */
+  u32 rk7;   /**< The most significant byte of LL^-1(round key 7). */
   u32 rk8;   /**< Round key 8. */
   u32 rk9;   /**< Round key 9. */
   u32 rk10;  /**< Round key 10. */
@@ -556,6 +556,13 @@ halfloop_result_t init_halfloop(void);
  *                           is broken!
  */
 halfloop_result_t test_halfloop(void);
+
+/**
+ * Validates a 2G ALE "TO" plaintext.
+ * @param pt a 24-bit plaintext.
+ * @return true if the plaintext is a valid 2G ALE "TO" plaintext.
+ */
+bool halfloop_valid_plaintext(u32 pt);
 
 /**
  * @brief Prints a formatted message to the console.

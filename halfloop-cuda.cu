@@ -25,6 +25,7 @@
 #include <thread>
 #include <vector>
 
+#include "halfloop-bitslice.h"
 #include "halfloop-common.h"
 #include "halfloop-cuda.h"
 
@@ -72,7 +73,7 @@ typedef struct {
   u16 * __restrict__ ddt;     /**< DDT output value LUT. */
 } CudaTables;
 
-/** Attach thread arguments. */
+/** Attack thread arguments. */
 typedef struct {
   halfloop_algorithm_t algorithm; /**< Selected algorithm. */
   const tuple_t *ct;              /**< Ciphertext-tweak tuples. */
@@ -97,6 +98,29 @@ typedef struct {
   bool profile;      /**< Runs workers in profiling mode when set to true. */
   bool verbose;      /**< Verbosity flag. */
 } ThreadArg;
+
+typedef struct {
+  std::mutex mutex;               /**< Worker synchronization mutex. */
+  std::unique_ptr<std::barrier<>> barrier; /**< Worker synchronization
+                                                barrier. */
+  u64 next_job;
+  u32 threadnum;
+  u32 ct0;
+  u32 ct1;
+  u64 tw0;
+  u8 rk70;
+  u32 rk8;
+  u32 rk9;
+  u32 rk10;
+  hlkey *found;
+  const tuple_t *tuples;
+  int num_tuples;
+  int devices[MAX_DEVICES];
+  int num_devices;
+  bool run;
+  bool verbose;
+  bool success;
+} BitsliceThreadArg;
 
 /**
  * @brief Represents a byte in the bitslice implementation.
@@ -687,7 +711,6 @@ __global__ void __launch_bounds__(128, 5) bitslice_kernel(
       cmp ^= 1U << low5;
       u32 hi3 = (idx & 0x7) << 29;
       found[atomicAdd(num_found, 1)] = hi3 | (low5 << 24) | (rk6a ^ twa[6]);
-      *num_found += 1;
     }
   }
 }
@@ -1393,25 +1416,22 @@ halfloop_result_t test_halfloop_cuda_bitslice(void) {
   u32 rk[11];
   u32 tw0[11];
   u32 tw1[11];
-  u32 *found = NULL;
-  u32 rk56;
+  hlkey *found = NULL;
   int num_found = 0;
   double elapsed;
   bool ok = false;
-  hlkey zerokey = { 0 };
+  hlkey zerokey = {0};
   halfloop_result_t err = HALFLOOP_SUCCESS;
 
-  RETURN_ON_ERROR(random_bytes(&pt, sizeof(u32)));
+  pt = (2 << 21) | ('A' << 14) | ('B' << 7) | 'C';
   RETURN_ON_ERROR(random_bytes(&tweak, sizeof(u64)));
   RETURN_ON_ERROR(random_bytes(&key, sizeof(hlkey)));
-  pt &= 0xffffff;
 
   RETURN_ON_ERROR(halfloop_encrypt(pt, key, tweak, &ct0));
   RETURN_ON_ERROR(halfloop_encrypt(pt, key, tweak ^ (1 << 30), &ct1));
   RETURN_ON_ERROR(key_schedule(rk, key, 0));
   RETURN_ON_ERROR(key_schedule(tw0, zerokey, tweak));
   RETURN_ON_ERROR(key_schedule(tw1, zerokey, 0));
-  rk56 = ((rk[5] & 0xff) << 24) | rk[6];
 
   print_message("Benchmarking CUDA bitslice algorithm.", WHITE);
   TIMER_START(&timer);
@@ -1439,7 +1459,7 @@ halfloop_result_t test_halfloop_cuda_bitslice(void) {
       (u64)(0x100000000ULL / elapsed));
 
   for (int i = 0; i < num_found && !ok; i++) {
-    if (rk56 == found[i]) {
+    if (memcmp(&key, found + i, sizeof(hlkey)) == 0) {
       ok = true;
     }
   }
@@ -1447,18 +1467,213 @@ halfloop_result_t test_halfloop_cuda_bitslice(void) {
   print_message("Bitslice implementation ok.", WHITE);
 error:
   if (err != HALFLOOP_SUCCESS) {
-    if (err != HALFLOOP_SUCCESS) {
-      print_message(
-          "CUDA bitslice benchmark failed. PT=%06x tweak=%016" PRIx64
-              " Key=%016" PRIx64 "%016" PRIx64,
-          RED,
-          pt,
-          tweak,
-          key.hi,
-          key.lo);
-    }
+    print_message(
+        "CUDA bitslice benchmark failed. PT=%06x tweak=%016" PRIx64
+            " Key=%016" PRIx64 "%016" PRIx64,
+        RED,
+        pt,
+        tweak,
+        key.hi,
+        key.lo);
   }
   free(found);
+  return err;
+}
+
+static bool get_next_bitslice_job(BitsliceThreadArg *arg, u32 *job) {
+  CHECK_BAD_ARGUMENT(arg == NULL);
+  CHECK_BAD_ARGUMENT(job == NULL);
+  arg->mutex.lock();
+  if (arg->next_job >= 0x10000) {
+    arg->run = false;
+    arg->mutex.unlock();
+    return false;
+  }
+  *job = arg->next_job;
+  arg->next_job += 1;
+  arg->mutex.unlock();
+  return true;
+}
+
+static void* bitslice_attack_thread(void *a) {
+  BitsliceThreadArg *arg = (BitsliceThreadArg*)a;
+
+  cudaDeviceProp deviceProp = {0};
+  hlkey *found = NULL;
+  int num_found = 0;
+  halfloop_result_t err = HALFLOOP_SUCCESS;
+
+  arg->mutex.lock();
+  int threadnum = (int)arg->threadnum;
+  arg->threadnum += 1;
+  arg->mutex.unlock();
+  int devicenum = threadnum >> 1;
+  if (devicenum >= arg->num_devices) {
+    return NULL;
+  }
+  devicenum = arg->devices[devicenum];
+  cudaSetDevice(devicenum);
+  cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
+  RETURN_ON_CUDA_ERROR(cudaGetDeviceProperties(&deviceProp, devicenum));
+  if (arg->verbose) {
+    print_message(
+        "Thread %d: Device: %s CC: %d.%d Shared mem: %d Multiprocessors: %d",
+        WHITE,
+        threadnum,
+        deviceProp.name,
+        deviceProp.major,
+        deviceProp.minor,
+        deviceProp.sharedMemPerBlock,
+        deviceProp.multiProcessorCount);
+  }
+
+  arg->barrier->arrive_and_wait();
+
+  while (arg->run) {
+    u32 job;
+    if (!get_next_bitslice_job(arg, &job)) {
+      if (arg->verbose) {
+        arg->mutex.lock();
+        print_message("No more jobs for thread %d.", WHITE, threadnum);
+        arg->mutex.unlock();
+      }
+      break;
+    }
+    if (arg->verbose) {
+      arg->mutex.lock();
+      print_message(
+          "Thread %d got job %04x (%.1f%%).",
+          WHITE,
+          threadnum,
+          job,
+          100.0 * job / 0x10000);
+      arg->mutex.unlock();
+    }
+    u32 rk7 = mix_columns(rotate_rows(((u32)arg->rk70 << 16) | job));
+    RETURN_ON_ERROR(halfloop_cuda_bitslice(
+        arg->ct0,
+        arg->ct1,
+        arg->tw0,
+        rk7,
+        arg->rk8,
+        arg->rk9,
+        arg->rk10,
+        &found,
+        &num_found));
+    for (int i = 0; i < num_found; i++) {
+      int matches = 0;
+      for (int j = 0; j < arg->num_tuples; j++) {
+        u32 pt = 0;
+        RETURN_ON_ERROR(halfloop_decrypt(
+            arg->tuples[j].ct,
+            found[i],
+            arg->tuples[j].tweak,
+            &pt));
+        if (halfloop_valid_plaintext(pt)) {
+          matches += 1;
+        }
+      }
+      if (matches > arg->num_tuples / 2) {
+        if (arg->verbose) {
+          print_message(
+              "Thread %d found key %016" PRIx64 "%016" PRIx64 " (%d/%d)",
+              GREEN,
+              threadnum,
+              found[i].hi,
+              found[i].lo,
+              matches,
+              arg->num_tuples);
+        }
+        arg->mutex.lock();
+        arg->run = false;
+        arg->success = true;
+        *(arg->found) = found[i];
+        arg->mutex.unlock();
+        RETURN_IF(true, HALFLOOP_SUCCESS);
+      }
+    }
+    FREE_AND_NULL(found);
+  }
+
+error:
+  if (err != HALFLOOP_SUCCESS) {
+    arg->run = false;
+  }
+  free(found);
+  return NULL;
+}
+
+halfloop_result_t halfloop_cuda_bitslice_all(
+    const u32 ct0,
+    const u32 ct1,
+    const u64 tw0,
+    const tuple_t *tuples,
+    int num_tuples,
+    u8 rk70,
+    u32 rk8,
+    u32 rk9,
+    u32 rk10,
+    int *devices,
+    int num_devices,
+    bool verbose,
+    hlkey *found) {
+  CHECK_BAD_ARGUMENT(tuples == NULL);
+  CHECK_BAD_ARGUMENT(num_tuples < 4);
+  CHECK_BAD_ARGUMENT(devices != NULL && *devices < 0);
+  CHECK_BAD_ARGUMENT(found == NULL);
+
+  BitsliceThreadArg arg = {
+    .next_job = 0,
+    .threadnum = 0,
+    .ct0 = ct0,
+    .ct1 = ct1,
+    .tw0 = tw0,
+    .rk70 = rk70,
+    .rk8 = rk8,
+    .rk9 = rk9,
+    .rk10 = rk10,
+    .found = found,
+    .tuples = tuples,
+    .num_tuples = num_tuples,
+    .num_devices = 0,
+    .run = true,
+    .verbose = verbose,
+    .success = false
+  };
+
+  std::vector<std::thread> threads;
+  int ndevs = 0;
+  halfloop_result_t err = HALFLOOP_SUCCESS;
+  RETURN_ON_CUDA_ERROR(cudaGetDeviceCount(&ndevs));
+  RETURN_IF(ndevs == 0, HALFLOOP_INTERNAL_ERROR);
+  if (devices == NULL || num_devices == 0) {
+    for (int i = 0; i < MAX_DEVICES && i < ndevs; i++) {
+      arg.devices[arg.num_devices++] = i;
+    }
+  } else {
+    for (int i = 0; i < MAX_DEVICES && i < num_devices; i++) {
+      if (devices[i] < ndevs) {
+        arg.devices[arg.num_devices++] = devices[i];
+      }
+    }
+  }
+  arg.barrier = std::make_unique<std::barrier<>>(arg.num_devices * 2);
+
+  if (verbose) {
+    print_message("Starting %d threads.", WHITE, arg.num_devices * 2);
+  }
+
+  for (int i = 0; i < arg.num_devices * 2; i++) {
+    threads.emplace_back(bitslice_attack_thread, &arg);
+  }
+  for (int i = 0; i < arg.num_devices * 2; i++) {
+    threads[(u64)i].join();
+  }
+
+error:
+  if (err == HALFLOOP_SUCCESS && !arg.success) {
+    return HALFLOOP_FAILURE;
+  }
   return err;
 }
 
@@ -1498,7 +1713,7 @@ halfloop_result_t halfloop_cuda_bitslice(
     u32 rk8n,
     u32 rk9n,
     u32 rk10n,
-    u32 **found,
+    hlkey **found,
     int *num_found) {
   CHECK_BAD_ARGUMENT(cta   & 0xff000000);
   CHECK_BAD_ARGUMENT(ctb   & 0xff000000);
@@ -1512,7 +1727,9 @@ halfloop_result_t halfloop_cuda_bitslice(
   *found = NULL;
   *num_found = 0;
   u32 *found_d = NULL;
+  u32 found_h[1024] = {0};
   int *num_found_d = NULL;
+  int num_found_h = 0;
   u32 *twa_d = NULL;
   u32 *twb_d = NULL;
   u32 rk10;
@@ -1541,11 +1758,6 @@ halfloop_result_t halfloop_cuda_bitslice(
   hlkey zerokey = {0};
   halfloop_result_t err = HALFLOOP_SUCCESS;
 
-  RETURN_ON_CUDA_ERROR(cudaMalloc(&found_d, 1024 * sizeof(u32)));
-  RETURN_ON_CUDA_ERROR(cudaMalloc(&num_found_d, sizeof(int)));
-  RETURN_ON_CUDA_ERROR(cudaMalloc(&twa_d, 11 * sizeof(u32)));
-  RETURN_ON_CUDA_ERROR(cudaMalloc(&twb_d, 11 * sizeof(u32)));
-
   /* Initialize lookup tables. */
   RETURN_ON_ERROR(init_cuda_tables(&tables));
 
@@ -1562,21 +1774,10 @@ halfloop_result_t halfloop_cuda_bitslice(
       tw ^ (1 << 30),
       rk9n & 0xff,
       twb + 10));
-  RETURN_ON_CUDA_ERROR(cudaMemcpy(
-      twa_d,
-      twa,
-      11 * sizeof(u32),
-      cudaMemcpyHostToDevice));
-  RETURN_ON_CUDA_ERROR(cudaMemcpy(
-      twb_d,
-      twb,
-      11 * sizeof(u32),
-      cudaMemcpyHostToDevice));
-  RETURN_ON_CUDA_ERROR(cudaMemcpy(
-      num_found_d,
-      num_found,
-      sizeof(int),
-      cudaMemcpyHostToDevice));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&twa_d, twa, 11 * sizeof(u32)));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&twb_d, twb, 11 * sizeof(u32)));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&found_d, found_h, 1024 * sizeof(u32)));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&num_found_d, &num_found_h, sizeof(int)));
   /* Calculate x6 and known round keys. */
   rk10 = rk10n ^ twa[10];
   rk9a = rk9n  ^ twa[9];
@@ -1611,22 +1812,36 @@ halfloop_result_t halfloop_cuda_bitslice(
       found_d,
       num_found_d,
       tables);
+  RETURN_ON_CUDA_ERROR(cudaDeviceSynchronize());
   RETURN_ON_CUDA_ERROR(cudaGetLastError());
-
   RETURN_ON_CUDA_ERROR(cudaMemcpy(
-      num_found,
+      &num_found_h,
       num_found_d,
       sizeof(int),
       cudaMemcpyDeviceToHost));
-  cudaDeviceSynchronize();
-  *found = (u32*)malloc(*num_found * sizeof(u32));
-  RETURN_IF(num_found != 0 && *found == NULL, HALFLOOP_MEMORY_ERROR);
+  RETURN_ON_CUDA_ERROR(cudaDeviceSynchronize());
+  *found = (hlkey*)malloc(num_found_h * sizeof(hlkey));
+  RETURN_IF(num_found_h != 0 && *found == NULL, HALFLOOP_MEMORY_ERROR);
   RETURN_ON_CUDA_ERROR(cudaMemcpy(
-      *found,
+      found_h,
       found_d,
-      *num_found * sizeof(u32),
+      num_found_h * sizeof(u32),
       cudaMemcpyDeviceToHost));
-  cudaDeviceSynchronize();
+  RETURN_ON_CUDA_ERROR(cudaDeviceSynchronize());
+  for (int i = 0; i < num_found_h; i++) {
+    hlkey key = halfloop_bitslice_revert_key(
+        found_h[i],
+        rk7n,
+        rk8n,
+        rk9n,
+        rk10n);
+    u32 pt = 0;
+    RETURN_ON_ERROR(halfloop_decrypt(cta, key, tw, &pt));
+    if (halfloop_valid_plaintext(pt)) {
+      (*found)[*num_found] = key;
+      *num_found += 1;
+    }
+  }
 
 error:
   if (err != HALFLOOP_SUCCESS) {
@@ -1852,7 +2067,8 @@ static void* ct_attack_thread(void *a) {
   if (devicenum >= arg->num_devices) {
     return NULL;
   }
-  cudaSetDevice(arg->devices[devicenum]);
+  devicenum = arg->devices[devicenum];
+  cudaSetDevice(devicenum);
   cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
 
   RETURN_ON_CUDA_ERROR(cudaGetDeviceProperties(&deviceProp, devicenum));
@@ -2031,7 +2247,7 @@ static void* ct_attack_thread(void *a) {
         sizeof(bool),
         cudaMemcpyDeviceToHost,
         stream));
-    cudaStreamSynchronize(stream);
+    RETURN_ON_CUDA_ERROR(cudaStreamSynchronize(stream));
     if (warn) {
       arg->mutex.lock();
       print_message("WARNING: Candidate keys may have been missed.", RED);
@@ -2163,7 +2379,7 @@ halfloop_result_t cuda_ct_attack(
   *num_candidates = 0;
   halfloop_result_t err = HALFLOOP_SUCCESS;
   RETURN_ON_CUDA_ERROR(cudaGetDeviceCount(&ndevs));
-  RETURN_IF(ndevs == 0, HALFLOOP_FAILURE);
+  RETURN_IF(ndevs == 0, HALFLOOP_INTERNAL_ERROR);
   if (devices == NULL || num_devices == 0) {
     for (int i = 0; i < MAX_DEVICES && i < ndevs; i++) {
       arg.devices[arg.num_devices++] = i;

@@ -358,6 +358,21 @@ error:
   return err;
 }
 
+bool halfloop_valid_plaintext(u32 pt) {
+  pt &= 0xffffff;
+  if ((pt >> 21) != 0x2) {
+    return false;
+  }
+  for (int i = 0; i < 3; i++) {
+    char c = pt & 0x7f;
+    if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) {
+      return false;
+    }
+    pt >>= 7;
+  }
+  return true;
+}
+
 halfloop_result_t print_message(const char *format, color_t color, ...) {
   if (format == NULL) {
     return HALFLOOP_BAD_ARGUMENT;

@@ -28,6 +28,24 @@ extern "C" {
 #endif /* __cplusplus */
 
 /**
+ * Recovers the original 128-bit key using 128 bits of key material from
+ * rk5-rk10.
+ * @param rk56 the least significant byte of round key 5 in the most significant
+ * byte, and round key 6 in the remaining bytes.
+ * @param rk7 round key 7.
+ * @param rk8 round key 8.
+ * @param rk9 round key 9.
+ * @param rk10 round key 10.
+ * @return the recovered original key.
+ */
+hlkey halfloop_bitslice_revert_key(
+    u32 rk56,
+    u32 rk7,
+    u32 rk8,
+    u32 rk9,
+    u32 rk10);
+
+/**
  * @brief Searches through 2^32 candidate keys for ones that cause the two
  * ciphertexts to be decrypted to the same value. The input ciphertexts come
  * from a pair of identical plaintexts that have been encrypted with tweaks that
@@ -40,9 +58,7 @@ extern "C" {
  * @param rk8 round key 8, normalized.
  * @param rk9 round key 9, normalized.
  * @param rk10 round key 10, normalized.
- * @param found return pointer to a list of found matches. Each match contains
- * rk 6 in the least significant 24 bits and the least significant byte of rk 5
- * in the most significant 8 bits.
+ * @param found return pointer to a list of matching keys.
  * @param num_found returns the number of keys in found.
  * @return halfloop_result_t HALFLOOP_SUCCESS on success.
  */
@@ -54,7 +70,7 @@ halfloop_result_t halfloop_bitslice(
     u32 rk8,
     u32 rk9,
     u32 rk10,
-    u32 **found,
+    hlkey **found,
     int *num_found);
 
 /**
