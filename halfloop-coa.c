@@ -85,6 +85,7 @@ static int compare_tuples(const void *tuple1, const void *tuple2) {
   return 0;
 }
 
+#ifdef CUDA_ENABLED
 /** Used by qsort to sort candidate keys. */
 static int compare_candidates(const void *candidate1, const void *candidate2) {
   candidate_key_t *c1 = (candidate_key_t*)candidate1;
@@ -121,6 +122,7 @@ static int compare_candidates(const void *candidate1, const void *candidate2) {
   }
   return 0;
 }
+#endif /* CUDA_ENABLED */
 
 /**
  * @brief Reads ciphertext-tweak tuples from a text file.
