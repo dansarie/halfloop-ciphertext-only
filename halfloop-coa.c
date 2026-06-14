@@ -1331,9 +1331,9 @@ int main(int argc, char *argv[]) {
   }
 
   setlocale(LC_NUMERIC, ""); /* For pretty-printing large numbers. */
-  RETURN_ON_ERROR(test_halfloop_bitslice());
 
   if (options.benchmark) {
+    RETURN_ON_ERROR(test_halfloop_bitslice());
     RETURN_ON_ERROR(halfloop_benchmark_bitslice());
 #ifdef CUDA_ENABLED
     RETURN_ON_ERROR(test_halfloop_cuda_bitslice());
