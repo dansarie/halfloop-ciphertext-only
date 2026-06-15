@@ -171,7 +171,7 @@ halfloop_result_t halfloop_cuda_bitslice_all(
  * rk10.
  * @param num_fixed Number of valid bits in fixed_bits.
  * @param candidates return variable for identified candidate keys. The caller
- * must return the array using free.
+ * must free the array.
  * @param num_candidates return variable for the number of candidate keys in the
  * candidates list.
  * @param verbose if set to true, the search will output more information to

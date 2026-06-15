@@ -51,7 +51,7 @@ typedef uint64_t u64;
 
 /** A 128-bit HALFLOOP key. */
 typedef struct {
-  u64 hi; /**< The most signinficant bits. */
+  u64 hi; /**< The most significant bits. */
   u64 lo; /**< The least significant bits. */
 } hlkey;
 
@@ -165,7 +165,7 @@ typedef enum {
                                  matches. */
   HALFLOOP_QUIT,            /**< Signals that a QUIT message was received by a
                                  thread. */
-  HALFLOOP_NETWORK_ERROR    /**< Signals that a network error occured. */
+  HALFLOOP_NETWORK_ERROR    /**< Signals that a network error occurred. */
 } halfloop_result_t;
 
 /**
@@ -285,7 +285,7 @@ typedef struct {
 /**
  * If E is not HALFLOOP_SUCCESS, jumps to the function's error label and prints
  * debugging information to stderr.
- * @param E return_value/error code. A member of halfloop_result_t.
+ * @param E return value/error code. A member of halfloop_result_t.
  */
 #define RETURN_ON_ERROR(E)\
 {\
