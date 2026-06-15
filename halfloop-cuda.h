@@ -106,6 +106,7 @@ halfloop_result_t halfloop_list_cuda_devices(
  * rk 6 in the least significant 24 bits and the least significant byte of rk 5
  * in the most significant 8 bits.
  * @param num_found returns the number of keys in found.
+ * @param stream a cudaStream_t to be used for the operations. May be NULL.
  * @return halfloop_result_t HALFLOOP_SUCCESS on success.
  */
 halfloop_result_t halfloop_cuda_bitslice(
@@ -117,7 +118,8 @@ halfloop_result_t halfloop_cuda_bitslice(
     u32 rk9,
     u32 rk10,
     hlkey **found,
-    int *num_found);
+    int *num_found,
+    void *stream);
 
 /**
  * Recovers the unknown 48 bits of the key through a brute force attack.

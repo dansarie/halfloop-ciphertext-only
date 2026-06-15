@@ -41,7 +41,14 @@
  * H to void pointers.
  */
 #define CREATE_CUDA_TABLE(D, H, S) \
-    create_cuda_device_table((void**)(D), (void*)(H), (S))
+    create_cuda_device_table((void**)(D), (void*)(H), (S), NULL)
+
+/**
+ * Shorthand for calling create_cuda_device_table that casts the arguments D and
+ * H to void pointers.
+ */
+#define CREATE_CUDA_TABLE_ASYNC(D, H, S, T) \
+    create_cuda_device_table((void**)(D), (void*)(H), (S), (T))
 
 /** Size of key candidate output buffer. */
 #define MAX_CANDIDATES (10000000)
@@ -1294,15 +1301,32 @@ static halfloop_result_t init_y2_lut_cuda(u8 y2delta, u32 *lut) {
 static halfloop_result_t create_cuda_device_table(
     void **device,
     const void *host,
-    size_t size) {
+    size_t size,
+    cudaStream_t stream) {
   CHECK_BAD_ARGUMENT(device == NULL);
   CHECK_BAD_ARGUMENT(size == 0);
   *device = NULL;
   halfloop_result_t err = HALFLOOP_SUCCESS;
-  RETURN_ON_CUDA_ERROR(cudaMalloc(device, size));
+  if (stream == NULL) {
+    RETURN_ON_CUDA_ERROR(cudaMalloc(device, size));
+  } else {
+    RETURN_ON_CUDA_ERROR(cudaMallocAsync(device, size, stream));
+  }
   if (host != NULL) {
-    RETURN_ON_CUDA_ERROR(cudaMemcpy(*device, host, size,
-        cudaMemcpyHostToDevice));
+    if (stream == NULL) {
+      RETURN_ON_CUDA_ERROR(cudaMemcpy(
+          *device,
+          host,
+          size,
+          cudaMemcpyHostToDevice));
+    } else {
+      RETURN_ON_CUDA_ERROR(cudaMemcpyAsync(
+          *device,
+          host,
+          size,
+          cudaMemcpyHostToDevice,
+          stream));
+    }
   }
 error:
   if (err != HALFLOOP_SUCCESS) {
@@ -1326,7 +1350,7 @@ error:
  * Initializes a CudaTables struct.
  * @param t the struct to initialize.
  */
-static halfloop_result_t init_cuda_tables(CudaTables *t) {
+static halfloop_result_t init_cuda_tables(CudaTables *t, cudaStream_t stream) {
   CHECK_BAD_ARGUMENT(t == NULL);
   u32 *y0_lut = NULL;
   u32 *y1_lut = NULL;
@@ -1338,7 +1362,11 @@ static halfloop_result_t init_cuda_tables(CudaTables *t) {
   y1_lut = (u32*)calloc(256 * 256 * 8, sizeof(u32));
   y2_lut = (u32*)calloc(256 * 8,       sizeof(u32));
   ddt    = (u16*)calloc(256 * 256,     sizeof(u16));
-  RETURN_IF(y0_lut == NULL || y1_lut == NULL || y2_lut == NULL || ddt == NULL,
+  RETURN_IF(
+      y0_lut == NULL
+      || y1_lut == NULL
+      || y2_lut == NULL
+      || ddt == NULL,
       HALFLOOP_MEMORY_ERROR);
 
   RETURN_ON_ERROR(init_ddt(ddt));
@@ -1355,17 +1383,61 @@ static halfloop_result_t init_cuda_tables(CudaTables *t) {
     }
   }
 
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&t->sbox,     SBOX,           0x100));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&t->inv_sbox, inv_SBOX,       0x100));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&t->mul2,     ffmul_table_2,  0x100));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&t->mul6,     ffmul_table_6,  0x100));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&t->mul8,     ffmul_table_8,  0x100));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&t->mul9,     ffmul_table_9,  0x100));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&t->mul39,    ffmul_table_39, 0x100));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&t->y0,    y0_lut, sizeof(u32) * 2048));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&t->y1,    y1_lut, sizeof(u32) * 522240));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&t->y2,    y2_lut, sizeof(u32) * 2048));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&t->ddt,   ddt, 256 * 256 * sizeof(u16)));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &t->sbox,
+      SBOX,
+      0x100,
+      stream));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &t->inv_sbox,
+      inv_SBOX,
+      0x100,
+      stream));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &t->mul2,
+      ffmul_table_2,
+      0x100,
+      stream));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &t->mul6,
+      ffmul_table_6,
+      0x100,
+      stream));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &t->mul8,
+      ffmul_table_8,
+      0x100,
+      stream));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &t->mul9,
+      ffmul_table_9,
+      0x100,
+      stream));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &t->mul39,
+      ffmul_table_39,
+      0x100,
+      stream));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &t->y0,
+      y0_lut,
+      sizeof(u32) * 2048,
+      stream));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &t->y1,
+      y1_lut,
+      sizeof(u32) * 522240,
+      stream));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &t->y2,
+      y2_lut,
+      sizeof(u32) * 2048,
+      stream));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &t->ddt,
+      ddt,
+      256 * 256 * sizeof(u16),
+      stream));
 error:
   free(y0_lut);
   free(y1_lut);
@@ -1378,29 +1450,43 @@ error:
  * Frees a CudaTables struct.
  * @param t the struct to free.
  */
-static halfloop_result_t free_cuda_tables(CudaTables *t) {
+static halfloop_result_t free_cuda_tables(CudaTables *t, cudaStream_t stream) {
   halfloop_result_t err = HALFLOOP_SUCCESS;
-  RETURN_ON_CUDA_ERROR(cudaFree(t->sbox));
+  if (stream == NULL) {
+    RETURN_ON_CUDA_ERROR(cudaFree(t->sbox));
+    RETURN_ON_CUDA_ERROR(cudaFree(t->inv_sbox));
+    RETURN_ON_CUDA_ERROR(cudaFree(t->mul2));
+    RETURN_ON_CUDA_ERROR(cudaFree(t->mul6));
+    RETURN_ON_CUDA_ERROR(cudaFree(t->mul8));
+    RETURN_ON_CUDA_ERROR(cudaFree(t->mul9));
+    RETURN_ON_CUDA_ERROR(cudaFree(t->mul39));
+    RETURN_ON_CUDA_ERROR(cudaFree(t->y0));
+    RETURN_ON_CUDA_ERROR(cudaFree(t->y1));
+    RETURN_ON_CUDA_ERROR(cudaFree(t->y2));
+    RETURN_ON_CUDA_ERROR(cudaFree(t->ddt));
+  } else {
+    RETURN_ON_CUDA_ERROR(cudaFreeAsync(t->sbox, stream));
+    RETURN_ON_CUDA_ERROR(cudaFreeAsync(t->inv_sbox, stream));
+    RETURN_ON_CUDA_ERROR(cudaFreeAsync(t->mul2, stream));
+    RETURN_ON_CUDA_ERROR(cudaFreeAsync(t->mul6, stream));
+    RETURN_ON_CUDA_ERROR(cudaFreeAsync(t->mul8, stream));
+    RETURN_ON_CUDA_ERROR(cudaFreeAsync(t->mul9, stream));
+    RETURN_ON_CUDA_ERROR(cudaFreeAsync(t->mul39, stream));
+    RETURN_ON_CUDA_ERROR(cudaFreeAsync(t->y0, stream));
+    RETURN_ON_CUDA_ERROR(cudaFreeAsync(t->y1, stream));
+    RETURN_ON_CUDA_ERROR(cudaFreeAsync(t->y2, stream));
+    RETURN_ON_CUDA_ERROR(cudaFreeAsync(t->ddt, stream));
+  }
   t->sbox = NULL;
-  RETURN_ON_CUDA_ERROR(cudaFree(t->inv_sbox));
   t->inv_sbox = NULL;
-  RETURN_ON_CUDA_ERROR(cudaFree(t->mul2));
   t->mul2 = NULL;
-  RETURN_ON_CUDA_ERROR(cudaFree(t->mul6));
   t->mul6 = NULL;
-  RETURN_ON_CUDA_ERROR(cudaFree(t->mul8));
   t->mul8 = NULL;
-  RETURN_ON_CUDA_ERROR(cudaFree(t->mul9));
   t->mul9 = NULL;
-  RETURN_ON_CUDA_ERROR(cudaFree(t->mul39));
   t->mul39 = NULL;
-  RETURN_ON_CUDA_ERROR(cudaFree(t->y0));
   t->y0 = NULL;
-  RETURN_ON_CUDA_ERROR(cudaFree(t->y1));
   t->y1 = NULL;
-  RETURN_ON_CUDA_ERROR(cudaFree(t->y2));
   t->y2 = NULL;
-  RETURN_ON_CUDA_ERROR(cudaFree(t->ddt));
   t->ddt = NULL;
 error:
   return err;
@@ -1444,7 +1530,8 @@ halfloop_result_t test_halfloop_cuda_bitslice(void) {
       rk[9],
       rk[10],
       &found,
-      &num_found));
+      &num_found,
+      NULL));
   TIMER_STOP(&timer);
   elapsed = timer_elapsed(timer);
   print_message(
@@ -1499,6 +1586,7 @@ static void* bitslice_attack_thread(void *a) {
   BitsliceThreadArg *arg = (BitsliceThreadArg*)a;
 
   cudaDeviceProp deviceProp = {0};
+  cudaStream_t stream = {0}; /* Stream used for the various CUDA operations. */
   hlkey *found = NULL;
   int num_found = 0;
   halfloop_result_t err = HALFLOOP_SUCCESS;
@@ -1526,6 +1614,7 @@ static void* bitslice_attack_thread(void *a) {
         deviceProp.sharedMemPerBlock,
         deviceProp.multiProcessorCount);
   }
+  RETURN_ON_CUDA_ERROR(cudaStreamCreate(&stream));
 
   arg->barrier->arrive_and_wait();
 
@@ -1559,7 +1648,8 @@ static void* bitslice_attack_thread(void *a) {
         arg->rk9,
         arg->rk10,
         &found,
-        &num_found));
+        &num_found,
+        stream));
     for (int i = 0; i < num_found; i++) {
       int matches = 0;
       for (int j = 0; j < arg->num_tuples; j++) {
@@ -1574,6 +1664,7 @@ static void* bitslice_attack_thread(void *a) {
         }
       }
       if (matches > arg->num_tuples / 2) {
+        arg->mutex.lock();
         if (arg->verbose) {
           print_message(
               "Thread %d found key %016" PRIx64 "%016" PRIx64 " (%d/%d)",
@@ -1584,7 +1675,6 @@ static void* bitslice_attack_thread(void *a) {
               matches,
               arg->num_tuples);
         }
-        arg->mutex.lock();
         arg->run = false;
         arg->success = true;
         *(arg->found) = found[i];
@@ -1600,6 +1690,7 @@ error:
     arg->run = false;
   }
   free(found);
+  cudaStreamDestroy(stream);
   return NULL;
 }
 
@@ -1643,6 +1734,7 @@ halfloop_result_t halfloop_cuda_bitslice_all(
 
   std::vector<std::thread> threads;
   int ndevs = 0;
+  int nthreads = 0;
   halfloop_result_t err = HALFLOOP_SUCCESS;
   RETURN_ON_CUDA_ERROR(cudaGetDeviceCount(&ndevs));
   RETURN_IF(ndevs == 0, HALFLOOP_INTERNAL_ERROR);
@@ -1657,16 +1749,17 @@ halfloop_result_t halfloop_cuda_bitslice_all(
       }
     }
   }
-  arg.barrier = std::make_unique<std::barrier<>>(arg.num_devices * 2);
+  nthreads = arg.num_devices * 2;
+  arg.barrier = std::make_unique<std::barrier<>>(nthreads);
 
   if (verbose) {
-    print_message("Starting %d threads.", WHITE, arg.num_devices * 2);
+    print_message("Starting %d threads.", WHITE, nthreads);
   }
 
-  for (int i = 0; i < arg.num_devices * 2; i++) {
+  for (int i = 0; i < nthreads; i++) {
     threads.emplace_back(bitslice_attack_thread, &arg);
   }
-  for (int i = 0; i < arg.num_devices * 2; i++) {
+  for (int i = 0; i < nthreads; i++) {
     threads[(u64)i].join();
   }
 
@@ -1714,7 +1807,8 @@ halfloop_result_t halfloop_cuda_bitslice(
     u32 rk9n,
     u32 rk10n,
     hlkey **found,
-    int *num_found) {
+    int *num_found,
+    void *str) {
   CHECK_BAD_ARGUMENT(cta   & 0xff000000);
   CHECK_BAD_ARGUMENT(ctb   & 0xff000000);
   CHECK_BAD_ARGUMENT(rk7n  & 0xff000000);
@@ -1756,10 +1850,19 @@ halfloop_result_t halfloop_cuda_bitslice(
   u32 rk5;
   CudaTables tables = {0};
   hlkey zerokey = {0};
+  cudaStream_t stream = (cudaStream_t)str;
+  cudaStream_t localstream = {0};
+  bool destroystream = false;
   halfloop_result_t err = HALFLOOP_SUCCESS;
 
+  if (stream == NULL) {
+    RETURN_ON_CUDA_ERROR(cudaStreamCreate(&localstream));
+    stream = localstream;
+    destroystream = true;
+  }
+
   /* Initialize lookup tables. */
-  RETURN_ON_ERROR(init_cuda_tables(&tables));
+  RETURN_ON_ERROR(init_cuda_tables(&tables, stream));
 
   /* Prepare round tweaks. */
   RETURN_ON_ERROR(key_schedule(twa, zerokey, tw));
@@ -1774,10 +1877,26 @@ halfloop_result_t halfloop_cuda_bitslice(
       tw ^ (1 << 30),
       rk9n & 0xff,
       twb + 10));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&twa_d, twa, 11 * sizeof(u32)));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&twb_d, twb, 11 * sizeof(u32)));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&found_d, found_h, 1024 * sizeof(u32)));
-  RETURN_ON_ERROR(CREATE_CUDA_TABLE(&num_found_d, &num_found_h, sizeof(int)));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &twa_d,
+      twa,
+      11 * sizeof(u32),
+      stream));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &twb_d,
+      twb,
+      11 * sizeof(u32),
+      stream));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &found_d,
+      found_h,
+      1024 * sizeof(u32),
+      stream));
+  RETURN_ON_ERROR(CREATE_CUDA_TABLE_ASYNC(
+      &num_found_d,
+      &num_found_h,
+      sizeof(int),
+      stream));
   /* Calculate x6 and known round keys. */
   rk10 = rk10n ^ twa[10];
   rk9a = rk9n  ^ twa[9];
@@ -1799,7 +1918,7 @@ halfloop_result_t halfloop_cuda_bitslice(
   rk51 = ((rk10 & 0xff) ^ 2 ^ SBOX[rk9a & 0xff]) << 8;
   rk5 = rk50 | rk51;
 
-  bitslice_kernel<<<1024,64>>>(
+  bitslice_kernel<<<1024, 64, 0, stream>>>(
       x6a,
       x6b,
       twa_d,
@@ -1812,22 +1931,30 @@ halfloop_result_t halfloop_cuda_bitslice(
       found_d,
       num_found_d,
       tables);
-  RETURN_ON_CUDA_ERROR(cudaDeviceSynchronize());
-  RETURN_ON_CUDA_ERROR(cudaGetLastError());
-  RETURN_ON_CUDA_ERROR(cudaMemcpy(
+  RETURN_ON_CUDA_ERROR(cudaMemcpyAsync(
       &num_found_h,
       num_found_d,
       sizeof(int),
-      cudaMemcpyDeviceToHost));
-  RETURN_ON_CUDA_ERROR(cudaDeviceSynchronize());
-  *found = (hlkey*)malloc(num_found_h * sizeof(hlkey));
-  RETURN_IF(num_found_h != 0 && *found == NULL, HALFLOOP_MEMORY_ERROR);
-  RETURN_ON_CUDA_ERROR(cudaMemcpy(
+      cudaMemcpyDeviceToHost,
+      stream));
+  RETURN_ON_CUDA_ERROR(cudaMemcpyAsync(
       found_h,
       found_d,
-      num_found_h * sizeof(u32),
-      cudaMemcpyDeviceToHost));
-  RETURN_ON_CUDA_ERROR(cudaDeviceSynchronize());
+      1024 * sizeof(u32),
+      cudaMemcpyDeviceToHost,
+      stream));
+  RETURN_ON_CUDA_ERROR(cudaFreeAsync(twa_d, stream));
+  RETURN_ON_CUDA_ERROR(cudaFreeAsync(twb_d, stream));
+  RETURN_ON_CUDA_ERROR(cudaFreeAsync(found_d, stream));
+  RETURN_ON_CUDA_ERROR(cudaFreeAsync(num_found_d, stream));
+  twa_d = NULL;
+  twb_d = NULL;
+  found_d = NULL;
+  num_found_d = NULL;
+  free_cuda_tables(&tables, stream);
+  RETURN_ON_CUDA_ERROR(cudaStreamSynchronize(stream));
+  *found = (hlkey*)malloc(num_found_h * sizeof(hlkey));
+  RETURN_IF(num_found_h != 0 && *found == NULL, HALFLOOP_MEMORY_ERROR);
   for (int i = 0; i < num_found_h; i++) {
     hlkey key = halfloop_bitslice_revert_key(
         found_h[i],
@@ -1848,19 +1975,9 @@ error:
     FREE_AND_NULL(*found);
     *num_found = 0;
   }
-  if (found_d != NULL) {
-    cudaFree(found_d);
+  if (destroystream) {
+    cudaStreamDestroy(localstream);
   }
-  if (num_found_d != NULL) {
-    cudaFree(num_found_d);
-  }
-  if (twa_d != NULL) {
-    cudaFree(twa_d);
-  }
-  if (twb_d != NULL) {
-    cudaFree(twb_d);
-  }
-  free_cuda_tables(&tables);
   return err;
 }
 
@@ -2096,7 +2213,7 @@ static void* ct_attack_thread(void *a) {
     tau1 = 31;
   }
 
-  RETURN_ON_ERROR(init_cuda_tables(&tables));
+  RETURN_ON_ERROR(init_cuda_tables(&tables, NULL));
 
   tw8_h           = (u32*)malloc(sizeof(u32) * arg->num_ct);
   tw9_h           = (u32*)malloc(sizeof(u32) * arg->num_ct);
@@ -2303,7 +2420,7 @@ error:
   if (err != HALFLOOP_SUCCESS) {
     arg->run = false;
   }
-  free_cuda_tables(&tables);
+  free_cuda_tables(&tables, NULL);
   cudaFree(tw8_d);
   cudaFree(tw9_d);
   cudaFree(twd_d);
