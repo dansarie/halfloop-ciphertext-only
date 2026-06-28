@@ -42,7 +42,8 @@ struct options {
   bool verbose;     /**< Set by the -v flag to increase verbosity. */
   bool profile;     /**< Set by the -p flag to run a limited search for
                          profiling purposes. */
-  bool brute_force;
+  bool brute_force; /**< If true, the remaining 48-bits of each key will be
+                         found by brute-force search. */
   halfloop_algorithm_t algorithm; /**< Which attack algorithm to use for the
                                        search. */
   char *filename;   /**< Path of file that contains ciphertexts and tweaks. */
@@ -662,7 +663,6 @@ static halfloop_result_t ct_attack2(
           u8 rk7 = 0;
           u32 keycount = 0;
           u32 rk8 = mix_columns(rotate_rows(i));
-          printf("rk8: %06x count: %d\n", rk8, count[i]);
           RETURN_ON_ERROR(validate_rk8(
               ct,
               v8,

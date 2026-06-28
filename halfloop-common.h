@@ -28,6 +28,7 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
+
 #ifdef _WIN32
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0A00
@@ -301,6 +302,7 @@ typedef struct {
     goto error;\
   }\
 }
+
 /** Prints an error and returns HALFLOOP_BAD_ARGUMENT if C is true. */
 #define CHECK_BAD_ARGUMENT(C)\
 {\

@@ -1567,6 +1567,14 @@ error:
   return err;
 }
 
+/**
+ * Fetches the next bitslice job for an attack worker thread.
+ * @param arg pointer to a BitsliceThreadArg struct that contains the search
+ * state.
+ * @param job return pointer for the next job: 0 <= job < 0x10000.
+ * @return true if a new job is available and false if there are no more jobs to
+ * perform.
+ */
 static bool get_next_bitslice_job(BitsliceThreadArg *arg, u32 *job) {
   CHECK_BAD_ARGUMENT(arg == NULL);
   CHECK_BAD_ARGUMENT(job == NULL);

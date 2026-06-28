@@ -617,18 +617,6 @@ halfloop_result_t init_y2_lut(u8 y2delta, __m256i *lut) {
   return HALFLOOP_SUCCESS;
 }
 
-/**
- * Validates a candidate for round key 8 and calculates the MSB of LL^-1(rk7).
- * @param ct a list of ciphertext-tweak tuples.
- * @param v8 a list of v8 states in the same order as the ct list.
- * @param num_ct number of items in ct and v8.
- * @param pairs a list of pairs with the required tweak difference, where the
- * indexes correspond to indexes in ct and v8.
- * @param num_pairs number of items in the pairs list.
- * @param rk8 the candidate rk8.
- * @param key return variable for the candidate for the MSB of LL^-1(rk7).
- * @param num number of pairs that matched the required v7 and x6 differences.
- */
 halfloop_result_t validate_rk8(
     const tuple_t *ct,
     const u32 *v8,
