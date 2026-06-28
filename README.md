@@ -114,14 +114,14 @@ available CUDA devices cannot be combined with an attack.
 | `-4`         | Use GPU algorithm 2 for the attack. Requires CUDA.            |
 | `-5`         | Use GPU algorithm 3 for the attack. Requires CUDA.            |
 | `-b`         | Runs performance benchmarks for the bitslice implementations. |
-| `-c`         | Sets the probability p<sub>ct</sub> that two randomly selected callsigns will differ only in the least significant byte. Entered as the exponential x in 2<sup>x</sup>, &minus;32 &#8805; x &lt; 0. The probability is used to calculate the τ values and the overall probability of success. |
+| `-c`         | Sets the probability p<sub>ct</sub> that two randomly selected callsigns will differ only in the least significant byte. Entered as the exponential x in 2<sup>x</sup>, &minus;32 &#8805; x &gt; 0. The probability is used to calculate the τ values and the overall probability of success. |
 | `-d`         | Specify CUDA device IDs to use. The provided device list must be a comma-separated list of device IDs. A list of available devices and their IDs can be found by using the `-l` argument. The default is to use all available devices. |
 | `-f`         | Skip the brute-force search for the last 48 key bits. The brute force search is always skipped when not using CUDA. |
 | `-l`         | Prints a list of available CUDA devices and their IDs.        |
 | `-m`         | Set the number of CUDA blocks to use per multiprocessor. Can be used for performance tuning. Default value: 2. |
 | `-p`         | Performs only a partial search. This option is used when running the program in a profiler. |
 | `-s`         | Set the target probability of success, 0 &lt; p<sub>success</sub> &lt; 1. The default value is 0.5. |
-| `-t`         | Set the τ<sub>1</sub> value. Overrides the value calculated from p<sub>ct</sub> and p</sub>success</sub>.|
+| `-t`         | Set the τ<sub>1</sub> value. Overrides the value calculated from p<sub>ct</sub> and p<sub>success</sub>.|
 | `-u`         | Set the τ<sub>2</sub> value. The default is set to achieve p<sub>success</sub> &#8805; 0.99 in the validation steps.|
 | `-v`         | Enable verbose output. Prints more information.               |
 
