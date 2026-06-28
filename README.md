@@ -9,7 +9,7 @@ the ALE standards. This repository contains implementations of the attacks on
 HALFLOOP-24 described in **Ciphertext-Only Attack on HALFLOOP-24**.
 
 The attack requires a large number of pairs of ciphertext and tweak. A utility,
-halfloop-generate-data, that generates random good pairs is provided for
+`halfloop-generate-data`, that generates random good pairs is provided for
 testing.
 
 For details on the requirements of ciphertexts and tweaks, probabilities of
@@ -35,6 +35,10 @@ cmake ..
 make
 ```
 
+By default, CMake will attempt to build the CUDA features if CUDA is detected on
+the build system. Use the cmake arguments `-DENABLE_CUDA=ON` and
+`-DENABLE_CUDA=OFF` to manually turn on and off CUDA support during the build.
+
 ## Run
 
 ### halfloop-generate-data
@@ -51,10 +55,10 @@ The general usage format is
 ```
 The callsign file contains the callsigns that should be used, one per row. Each
 callsign must be three characters long and must only contain the capital letters
-A-Z or numbers 0-9. The number of bins argument specifies how many 16-minute
-bins with calls that should be simulated and the calls per bin arguments
-specifies how many calls each bin should contain. The following command
-generates 26 16-minute bins with 96 calls in each bin.
+A&ndash;Z or numbers 0&ndash;9. The number of bins argument specifies how many
+16-minute bins with calls that should be simulated and the calls per bin
+arguments specifies how many calls each bin should contain. The following
+command generates 26 16-minute bins with 96 calls in each bin.
 ```console
 ./halfloop-generate-data ../sweden-callsigns.txt 26 96 > data.txt
 Loaded 64 callsigns.
@@ -110,24 +114,24 @@ available CUDA devices cannot be combined with an attack.
 | `-4`         | Use GPU algorithm 2 for the attack. Requires CUDA.            |
 | `-5`         | Use GPU algorithm 3 for the attack. Requires CUDA.            |
 | `-b`         | Runs performance benchmarks for the bitslice implementations. |
-| `-c`         | Sets the probability p<sub>ct</sub> that two randomly selected callsigns will differ only in the least significant byte. Entered as the exponential x in 2<sup>x</sup>, -32 &#8805; x &lt; 0. The probability is used to calculate the τ values and the overall probability of success. |
+| `-c`         | Sets the probability p<sub>ct</sub> that two randomly selected callsigns will differ only in the least significant byte. Entered as the exponential x in 2<sup>x</sup>, &minus;32 &#8805; x &lt; 0. The probability is used to calculate the τ values and the overall probability of success. |
 | `-d`         | Specify CUDA device IDs to use. The provided device list must be a comma-separated list of device IDs. A list of available devices and their IDs can be found by using the `-l` argument. The default is to use all available devices. |
 | `-f`         | Skip the brute-force search for the last 48 key bits. The brute force search is always skipped when not using CUDA. |
 | `-l`         | Prints a list of available CUDA devices and their IDs.        |
 | `-m`         | Set the number of CUDA blocks to use per multiprocessor. Can be used for performance tuning. Default value: 2. |
 | `-p`         | Performs only a partial search. This option is used when running the program in a profiler. |
-| `-s`         | Set the target probability of success, 0 &lt; p_<sub>success</sub> &lt; 1. The default value is 0.5. |
+| `-s`         | Set the target probability of success, 0 &lt; p<sub>success</sub> &lt; 1. The default value is 0.5. |
 | `-t`         | Set the τ<sub>1</sub> value. Overrides the value calculated from p<sub>ct</sub> and p</sub>success</sub>.|
 | `-u`         | Set the τ<sub>2</sub> value. The default is set to achieve p<sub>success</sub> &#8805; 0.99 in the validation steps.|
 | `-v`         | Enable verbose output. Prints more information.               |
 
 ## License
 
-Copyright (C) 2022 Marcus Dansarie, Patrick Derbez, Gregor Leander, and Lukas
+Copyright &#169; 2022 Marcus Dansarie, Patrick Derbez, Gregor Leander, and Lukas
 Stennes.
 
-Copyright (C) 2025-2026 Marcus Dansarie, Gregor Leander, Shahram Rasoolzadeh,
+Copyright &#169; 2025-2026 Marcus Dansarie, Gregor Leander, Shahram Rasoolzadeh,
 Lukas Stennes, and Cihangir Tezcan.
 
 This project is licensed under the GNU General Public License — see the
-[LICENSE](LICENSE) file for details.
+[LICENSE](LICENSE.txt) file for details.
