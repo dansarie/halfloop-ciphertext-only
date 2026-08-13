@@ -6,7 +6,8 @@
 HALFLOOP-24 is a cipher specified in MIL-STD-188-141 and used for encrypting
 Automatic Link Etablishment (ALE) frames in the second and third generations of
 the ALE standards. This repository contains implementations of the attacks on
-HALFLOOP-24 described in **Ciphertext-Only Attack on HALFLOOP-24**.
+HALFLOOP-24 described in
+[Ciphertext-Only Attack on HALFLOOP-24](https://doi.org/10.1007/978-3-032-31130-6_8).
 
 The attack requires a large number of pairs of ciphertext and tweak. A utility,
 `halfloop-generate-data`, that generates random good pairs is provided for
@@ -124,6 +125,18 @@ available CUDA devices cannot be combined with an attack.
 | `-t`         | Set the τ<sub>1</sub> value. Overrides the value calculated from p<sub>ct</sub> and p<sub>success</sub>.|
 | `-u`         | Set the τ<sub>2</sub> value. The default is set to achieve p<sub>success</sub> &#8805; 0.99 in the validation steps.|
 | `-v`         | Enable verbose output. Prints more information.               |
+
+## Citing
+
+If you use this software, please cite the following article:
+```
+Dansarie, M., Leander, G., Rasoolzadeh, S., Stennes, L., Tezcan, C. (2026).
+Ciphertext-Only Attack on HALFLOOP-24. In: El Mrabet, N., Ghammam, L.,
+Rodríguez-Henríquez, F. (eds) Progress in Cryptology - AFRICACRYPT 2026.
+AFRICACRYPT 2026. Lecture Notes in Computer Science, vol 16832. Springer, Cham.
+https://doi.org/10.1007/978-3-032-31130-6_8
+```
+Citation information is also provided in [CITATION.cff](CITATION.cff).
 
 ## License
 

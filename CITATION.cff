@@ -1,0 +1,101 @@
+cff-version: 1.2.0
+message: Please cite the following works when using this software.
+type: software
+abstract: >-
+  HALFLOOP-24 is a cipher specified in MIL-STD-188-141 and used for encrypting
+  Automatic Link Etablishment (ALE) frames in the second and third generations
+  of the ALE standards. This repository contains implementations of the attacks
+  on HALFLOOP-24 described in Breaking HALFLOOP-24. A bitslicing implementation
+  of HALFLOOP-24 is used for the brute force key search phase of the main
+  attack.
+
+  The related tweak attack requires at least three good pairs of plaintext,
+  ciphertext, and tweak. A utility, halfloop-generate-data, that generates
+  random good pairs is provided for testing. Another utility, halfloop-tweak,
+  aids in interpreting the data format of HALFLOOP-24 tweaks.
+
+authors:
+  - family-names: Dansarie
+    given-names: Marcus
+    orcid: https://orcid.org/0000-0001-9246-0263
+  - family-names: Leander
+    given-names: Gregor
+    orcid: https://orcid.org/0000-0002-2579-8587
+  - family-names: Rasoolzadeh
+    given-names: Shahram
+    orcid: https://orcid.org/0000-0001-6848-2227
+  - family-names: Stennes
+    given-names: Lukas
+    orcid: https://orcid.org/0000-0002-6703-6476
+  - family-names: Tezcan
+    given-names: Cihangir
+    orcid: https://orcid.org/0000-0002-9041-1932
+date-released: 2026-06-28
+doi: 10.5281/ZENODO.20088257
+identifiers:
+  - type: doi
+    value: 10.5281/ZENODO.20088257
+  - type: url
+    value: https://zenodo.org/doi/10.5281/zenodo.20088257
+title: 'dansarie/halfloop-ciphertext-only: 1.1.0'
+url: https://zenodo.org/doi/10.5281/zenodo.20088257
+version: v1.1.0
+license: GPL-3.0
+
+preferred-citation:
+  authors:
+    - family-names: Dansarie
+      given-names: Marcus
+      orcid: https://orcid.org/0000-0001-9246-0263
+    - family-names: Leander
+      given-names: Gregor
+      orcid: https://orcid.org/0000-0002-2579-8587
+    - family-names: Rasoolzadeh
+      given-names: Shahram
+      orcid: https://orcid.org/0000-0001-6848-2227
+    - family-names: Stennes
+      given-names: Lukas
+      orcid: https://orcid.org/0000-0002-6703-6476
+    - family-names: Tezcan
+      given-names: Cihangir
+      orcid: https://orcid.org/0000-0002-9041-1932
+  doi: 10.1007/978-3-032-31130-6_8
+  identifiers:
+    - type: doi
+      value: 10.1007/978-3-032-31130-6_8
+    - type: url
+      value: http://dx.doi.org/10.1007/978-3-032-31130-6_8
+    - type: other
+      value: urn:isbn:9783032311290
+    - type: other
+      value: urn:issn:0302-9743
+  title: "Ciphertext-Only Attack on\_HALFLOOP-24"
+  url: http://dx.doi.org/10.1007/978-3-032-31130-6_8
+  database: Crossref
+  date-published: 2026-07-09
+  year: 2026
+  isbn: '9783032311290'
+  issn: 0302-9743
+  journal: Lecture Notes in Computer Science
+  languages:
+    - en
+  publisher:
+    name: Springer Nature Switzerland
+  start: '187'
+  end: '209'
+  type: generic
+  abstract: >-
+    We present a full key-recovery ciphertext-only attack on the tweakable block
+    cipher HALFLOOP-24 which is standardized by the US military and NATO for use
+    in the Automatic Link Establishment protocol for high-frequency radio. Our
+    attack is based on the observation that the probability-one differential,
+    which was used for known- and chosen-plaintext attacks in prior works, can
+    be viewed as a probability-p differential when the plaintexts are unknown,
+    where p is the network-dependent probability that plaintext differences line
+    up with tweak differences. Further, due to the fact that the tweak is
+    publicly known, the specific values of the plaintexts are not necessary to
+    identify the correct key. Our attack has a theoretical complexity of roughly
+    2<sup>65</sup>encryptions, given a favorable ALE network setup that allows
+    us to collect enough suitable ciphertexts. To give a hardware-grounded
+    estimate of the cost of the whole attack, we provide optimized CPU and GPU
+    implementations.
